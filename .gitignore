@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+*.egg-info/
+
+# Data files
+data/
+output/
+*.zarr
+*.zarr.zip
+*.mp4
+*.avi
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Mac
+.DS_Store
+
+# Temporary files
+*.log
+.pytest_cache/
