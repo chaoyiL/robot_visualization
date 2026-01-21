@@ -68,9 +68,9 @@ def transform_quest_to_robot(quest_pos, quest_rot_axis_angle):
     # 步骤2：坐标轴重映射
     # Quest右手(x右, y上, z后) → Robot(x前, y左, z上)
     T = np.array([
-        [ 0,  0, -1],  # Robot_X = -Quest_Z (后→前)
-        [ 1,  0,  0],  # Robot_Y =  Quest_X (右→左)
-        [ 0,  1,  0]   # Robot_Z =  Quest_Y (上→上)
+        [ 0,  0, -1],  # Robot_X = -Quest_Z (Quest后→Robot前)
+        [-1,  0,  0],  # Robot_Y = -Quest_X (Quest右→Robot左)
+        [ 0,  1,  0]   # Robot_Z =  Quest_Y (Quest上→Robot上)
     ])
     
     robot_pos = quest_pos_rh @ T.T
