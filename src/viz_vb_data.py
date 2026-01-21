@@ -274,7 +274,6 @@ def create_combined_image(data, frame_idx, pc_images, world_image, height=250):
             stacked.append(sep)
     return np.vstack(stacked)
 
-
 def _lookat_camera_pose(eye, center, up):
     eye = np.array(eye, dtype=np.float64)
     center = np.array(center, dtype=np.float64)
@@ -292,11 +291,9 @@ def _lookat_camera_pose(eye, center, up):
     m[:3, 3] = -m[:3, :3] @ eye
     return np.linalg.inv(m)
 
-
 def _axis_mesh(size=0.05):
     axis = trimesh.creation.axis(origin_size=size * 0.2, axis_length=size)
     return pyrender.Mesh.from_trimesh(axis, smooth=False)
-
 
 def _pointcloud_mesh(points, color=[1.0, 1.0, 0.0]):
     if len(points) == 0:
@@ -304,7 +301,6 @@ def _pointcloud_mesh(points, color=[1.0, 1.0, 0.0]):
     pts = np.asarray(points, dtype=np.float64)
     colors = np.tile(np.array(color, dtype=np.float64), (pts.shape[0], 1))
     return pyrender.Mesh.from_points(pts, colors=colors)
-
 
 def _cylinder_between(p0, p1, radius, color):
     v = p1 - p0
@@ -318,7 +314,6 @@ def _cylinder_between(p0, p1, radius, color):
     rgba = np.array(list(color) + [1.0])
     cyl.visual.vertex_colors = (rgba * 255).astype(np.uint8)
     return cyl
-
 
 def _line_mesh(points, color=[1.0, 0.0, 0.0], radius=0.01):
     if len(points) < 2:
@@ -334,13 +329,11 @@ def _line_mesh(points, color=[1.0, 0.0, 0.0], radius=0.01):
     merged = trimesh.util.concatenate(meshes)
     return pyrender.Mesh.from_trimesh(merged, smooth=False)
 
-
 def _placeholder_cad_box():
     # TODO: Replace with real CAD model mesh when available.
     box = trimesh.creation.box(extents=[0.03, 0.1, 0.03])
     box.visual.vertex_colors = np.tile(np.array([180, 180, 180, 255], dtype=np.uint8), (len(box.vertices), 1))
     return pyrender.Mesh.from_trimesh(box, smooth=False)
-
 
 def _gripper_boxes(opening_width, color=(1.0, 0.0, 0.0)):
     """Create two symmetric gripper boxes around the tool frame.
@@ -387,7 +380,7 @@ class CombinedVisualizer:
         if record_mode:
             self.record_episode()
             if not continue_after_record:
-                print("✅ 录制完成，退出程序")
+                print(" 录制完成，退出程序")
                 return
         
         self.print_help()
@@ -399,7 +392,7 @@ class CombinedVisualizer:
         self.data, self.has = load_episode_data(self.rb, ep_id)
         self.frame_idx = 0
         self.setup_camera_params()
-        print(f"✅ 加载 Episode {ep_id} ({self.ep_idx + 1}/{len(self.episodes)}), 帧数: {len(self.data['robot0']['poses'])}")
+        print(f" 加载 Episode {ep_id} ({self.ep_idx + 1}/{len(self.episodes)}), 帧数: {len(self.data['robot0']['poses'])}")
     
     def setup_camera_params(self):
         """设置点云相机参数"""
@@ -639,12 +632,12 @@ class CombinedVisualizer:
     def record_episode(self):
         """录制当前episode"""
         max_frames = len(self.data['robot0']['poses'])
-        print(f"🎬 开始录制 Episode {self.episodes[self.ep_idx]}, 帧数: {max_frames}, FPS: {self.record_fps}")
+        print(f" 开始录制 Episode {self.episodes[self.ep_idx]}, 帧数: {max_frames}, FPS: {self.record_fps}")
         
         # 获取第一帧确定尺寸
         first_frame = self.render_frame(0)
         if first_frame is None:
-            print("❌ 无法生成帧，录制失败")
+            print(" 无法生成帧，录制失败")
             return
         
         h, w = first_frame.shape[:2]
@@ -652,7 +645,7 @@ class CombinedVisualizer:
         writer = cv2.VideoWriter(self.output_video, fourcc, self.record_fps, (w, h))
         
         if not writer.isOpened():
-            print(f"❌ 无法创建视频文件: {self.output_video}")
+            print(f" 无法创建视频文件: {self.output_video}")
             return
         
         for i in range(max_frames):
@@ -663,13 +656,13 @@ class CombinedVisualizer:
                 print(f"   进度: {i + 1}/{max_frames} ({(i + 1) / max_frames * 100:.1f}%)")
         
         writer.release()
-        print(f"✅ 录制完成: {self.output_video}")
+        print(f" 录制完成: {self.output_video}")
         self.frame_idx = 0
     
     def print_help(self):
         """打印帮助"""
         print("\n" + "=" * 50)
-        print("🎮 控制: A/D=前/后帧  W/S=前/后Episode  R=重置视角  Q=退出")
+        print(" 控制: A/D=前/后帧  W/S=前/后Episode  R=重置视角  Q=退出")
         print("=" * 50 + "\n")
     
     def run(self):
@@ -720,19 +713,19 @@ def main():
     args = parser.parse_args()
     
     if not os.path.exists(args.zarr_path):
-        print(f"❌ 找不到文件: {args.zarr_path}")
+        print(f" 找不到文件: {args.zarr_path}")
         return
     
-    print(f"🔍 加载: {args.zarr_path}")
+    print(f" 加载: {args.zarr_path}")
     
     store = ZipStore(args.zarr_path, mode='r')
     try:
         root = zarr.open_group(store=store, mode='r')
         rb = ReplayBuffer.create_from_group(root)
-        print(f"✅ 加载完成, 帧数: {rb.n_steps}, Episodes: {rb.n_episodes}")
+        print(f" 加载完成, 帧数: {rb.n_steps}, Episodes: {rb.n_episodes}")
 
         if args.record and args.record_episode >= rb.n_episodes:
-            print(f"❌ Episode {args.record_episode} 超出范围 (共 {rb.n_episodes} 个)")
+            print(f" Episode {args.record_episode} 超出范围 (共 {rb.n_episodes} 个)")
             return
 
         if args.record and args.output_video is None:

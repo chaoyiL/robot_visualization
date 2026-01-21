@@ -41,7 +41,6 @@ from numcodecs.registry import register_codec, get_codec
 
 import imagecodecs
 
-
 def protective_squeeze(x: numpy.ndarray):
     """
     Squeeze dim only if it's not the last dim.
@@ -105,7 +104,6 @@ class Aec(Codec):
             out=_flat(out),
         )
 
-
 class Apng(Codec):
     """APNG codec for numcodecs."""
 
@@ -127,7 +125,6 @@ class Apng(Codec):
 
     def decode(self, buf, out=None):
         return imagecodecs.apng_decode(buf, out=out)
-
 
 class Avif(Codec):
     """AVIF codec for numcodecs."""
@@ -169,7 +166,6 @@ class Avif(Codec):
             buf, index=self.index, numthreads=self.numthreads, out=out
         )
 
-
 class Bitorder(Codec):
     """Bitorder codec for numcodecs."""
 
@@ -180,7 +176,6 @@ class Bitorder(Codec):
 
     def decode(self, buf, out=None):
         return imagecodecs.bitorder_decode(buf, out=_flat(out))
-
 
 class Bitshuffle(Codec):
     """Bitshuffle codec for numcodecs."""
@@ -203,7 +198,6 @@ class Bitshuffle(Codec):
             blocksize=self.blocksize,
             out=_flat(out),
         )
-
 
 class Blosc(Codec):
     """Blosc codec for numcodecs."""
@@ -243,7 +237,6 @@ class Blosc(Codec):
             buf, numthreads=self.numthreads, out=_flat(out)
         )
 
-
 class Blosc2(Codec):
     """Blosc2 codec for numcodecs."""
 
@@ -282,7 +275,6 @@ class Blosc2(Codec):
             buf, numthreads=self.numthreads, out=_flat(out)
         )
 
-
 class Brotli(Codec):
     """Brotli codec for numcodecs."""
 
@@ -300,7 +292,6 @@ class Brotli(Codec):
 
     def decode(self, buf, out=None):
         return imagecodecs.brotli_decode(buf, out=_flat(out))
-
 
 class ByteShuffle(Codec):
     """ByteShuffle codec for numcodecs."""
@@ -341,7 +332,6 @@ class ByteShuffle(Codec):
             out=out,
         )
 
-
 class Bz2(Codec):
     """Bz2 codec for numcodecs."""
 
@@ -355,7 +345,6 @@ class Bz2(Codec):
 
     def decode(self, buf, out=None):
         return imagecodecs.bz2_decode(buf, out=_flat(out))
-
 
 class Cms(Codec):
     """CMS codec for numcodecs."""
@@ -373,7 +362,6 @@ class Cms(Codec):
         # return imagecodecs.cms_transform(buf)
         raise NotImplementedError
 
-
 class Deflate(Codec):
     """Deflate codec for numcodecs."""
 
@@ -388,7 +376,6 @@ class Deflate(Codec):
 
     def decode(self, buf, out=None):
         return imagecodecs.deflate_decode(buf, out=_flat(out), raw=self.raw)
-
 
 class Delta(Codec):
     """Delta codec for numcodecs."""
@@ -417,7 +404,6 @@ class Delta(Codec):
             buf, axis=self.axis, dist=self.dist, out=out
         )
 
-
 class Float24(Codec):
     """Float24 codec for numcodecs."""
 
@@ -437,7 +423,6 @@ class Float24(Codec):
         return imagecodecs.float24_decode(
             buf, byteorder=self.byteorder, out=out
         )
-
 
 class FloatPred(Codec):
     """Floating Point Predictor codec for numcodecs."""
@@ -465,7 +450,6 @@ class FloatPred(Codec):
             buf, axis=self.axis, dist=self.dist, out=out
         )
 
-
 class Gif(Codec):
     """GIF codec for numcodecs."""
 
@@ -477,7 +461,6 @@ class Gif(Codec):
 
     def decode(self, buf, out=None):
         return imagecodecs.gif_decode(buf, asrgb=False, out=out)
-
 
 class Heif(Codec):
     """HEIF codec for numcodecs."""
@@ -520,7 +503,6 @@ class Heif(Codec):
             out=out,
         )
 
-
 class Jetraw(Codec):
     """Jetraw codec for numcodecs."""
 
@@ -548,7 +530,6 @@ class Jetraw(Codec):
         if out is None:
             out = numpy.empty(self.shape, numpy.uint16)
         return imagecodecs.jetraw_decode(buf, out=out)
-
 
 class Jpeg(Codec):
     """JPEG codec for numcodecs."""
@@ -631,7 +612,6 @@ class Jpeg(Codec):
                 config[key] = base64.b64decode(value.encode())
         return cls(**config)
 
-
 class Jpeg2k(Codec):
     """JPEG 2000 codec for numcodecs."""
 
@@ -679,7 +659,6 @@ class Jpeg2k(Codec):
             buf, verbose=self.verbose, numthreads=self.numthreads, out=out
         )
 
-
 class JpegLs(Codec):
     """JPEG LS codec for numcodecs."""
 
@@ -694,7 +673,6 @@ class JpegLs(Codec):
 
     def decode(self, buf, out=None):
         return imagecodecs.jpegls_decode(buf, out=out)
-
 
 class JpegXl(Codec):
     """JPEG XL codec for numcodecs."""
@@ -726,7 +704,7 @@ class JpegXl(Codec):
         Extra channels are only supported for grayscale images in planar mode.
         
         Parameters
-        ----------
+
         level : Default to None, i.e. not overwriting lossess and decodingspeed options.
             When < 0: Use lossless compression
             When in [0,1,2,3,4]: Sets the decoding speed tier for the provided options. 
@@ -842,7 +820,6 @@ class JpegXl(Codec):
             out=out,
         )
 
-
 class JpegXr(Codec):
     """JPEG XR codec for numcodecs."""
 
@@ -875,7 +852,6 @@ class JpegXr(Codec):
     def decode(self, buf, out=None):
         return imagecodecs.jpegxr_decode(buf, fp2int=self.fp2int, out=out)
 
-
 class Lerc(Codec):
     """LERC codec for numcodecs."""
 
@@ -900,7 +876,6 @@ class Lerc(Codec):
     def decode(self, buf, out=None):
         return imagecodecs.lerc_decode(buf, out=out)
 
-
 class Ljpeg(Codec):
     """LJPEG codec for numcodecs."""
 
@@ -915,7 +890,6 @@ class Ljpeg(Codec):
 
     def decode(self, buf, out=None):
         return imagecodecs.ljpeg_decode(buf, out=out)
-
 
 class Lz4(Codec):
     """LZ4 codec for numcodecs."""
@@ -934,7 +908,6 @@ class Lz4(Codec):
 
     def decode(self, buf, out=None):
         return imagecodecs.lz4_decode(buf, header=self.header, out=_flat(out))
-
 
 class Lz4f(Codec):
     """LZ4F codec for numcodecs."""
@@ -965,7 +938,6 @@ class Lz4f(Codec):
     def decode(self, buf, out=None):
         return imagecodecs.lz4f_decode(buf, out=_flat(out))
 
-
 class Lzf(Codec):
     """LZF codec for numcodecs."""
 
@@ -979,7 +951,6 @@ class Lzf(Codec):
 
     def decode(self, buf, out=None):
         return imagecodecs.lzf_decode(buf, header=self.header, out=_flat(out))
-
 
 class Lzma(Codec):
     """LZMA codec for numcodecs."""
@@ -995,7 +966,6 @@ class Lzma(Codec):
     def decode(self, buf, out=None):
         return imagecodecs.lzma_decode(buf, out=_flat(out))
 
-
 class Lzw(Codec):
     """LZW codec for numcodecs."""
 
@@ -1006,7 +976,6 @@ class Lzw(Codec):
 
     def decode(self, buf, out=None):
         return imagecodecs.lzw_decode(buf, out=_flat(out))
-
 
 class PackBits(Codec):
     """PackBits codec for numcodecs."""
@@ -1023,7 +992,6 @@ class PackBits(Codec):
 
     def decode(self, buf, out=None):
         return imagecodecs.packbits_decode(buf, out=_flat(out))
-
 
 class Pglz(Codec):
     """PGLZ codec for numcodecs."""
@@ -1042,7 +1010,6 @@ class Pglz(Codec):
     def decode(self, buf, out=None):
         return imagecodecs.pglz_decode(buf, header=self.header, out=_flat(out))
 
-
 class Png(Codec):
     """PNG codec for numcodecs."""
 
@@ -1058,7 +1025,6 @@ class Png(Codec):
     def decode(self, buf, out=None):
         return imagecodecs.png_decode(buf, out=out)
 
-
 class Qoi(Codec):
     """QOI codec for numcodecs."""
 
@@ -1073,7 +1039,6 @@ class Qoi(Codec):
 
     def decode(self, buf, out=None):
         return imagecodecs.qoi_decode(buf, out=out)
-
 
 class Rgbe(Codec):
     """RGBE codec for numcodecs."""
@@ -1100,7 +1065,6 @@ class Rgbe(Codec):
             buf, header=self.header, rle=self.rle, out=out
         )
 
-
 class Rcomp(Codec):
     """Rcomp codec for numcodecs."""
 
@@ -1123,7 +1087,6 @@ class Rcomp(Codec):
             out=out,
         )
 
-
 class Snappy(Codec):
     """Snappy codec for numcodecs."""
 
@@ -1134,7 +1097,6 @@ class Snappy(Codec):
 
     def decode(self, buf, out=None):
         return imagecodecs.snappy_decode(buf, out=_flat(out))
-
 
 class Spng(Codec):
     """SPNG codec for numcodecs."""
@@ -1150,7 +1112,6 @@ class Spng(Codec):
 
     def decode(self, buf, out=None):
         return imagecodecs.spng_decode(buf, out=out)
-
 
 class Tiff(Codec):
     """TIFF codec for numcodecs."""
@@ -1176,7 +1137,6 @@ class Tiff(Codec):
             out=out,
         )
 
-
 class Webp(Codec):
     """WebP codec for numcodecs."""
 
@@ -1196,7 +1156,6 @@ class Webp(Codec):
 
     def decode(self, buf, out=None):
         return imagecodecs.webp_decode(buf, hasalpha=self.hasalpha, out=out)
-
 
 class Xor(Codec):
     """XOR codec for numcodecs."""
@@ -1219,7 +1178,6 @@ class Xor(Codec):
         if self.shape is not None or self.dtype is not None:
             buf = numpy.frombuffer(buf, dtype=self.dtype).reshape(*self.shape)
         return imagecodecs.xor_decode(buf, axis=self.axis, out=_flat(out))
-
 
 class Zfp(Codec):
     """ZFP codec for numcodecs."""
@@ -1282,7 +1240,6 @@ class Zfp(Codec):
             out=out,
         )
 
-
 class Zlib(Codec):
     """Zlib codec for numcodecs."""
 
@@ -1296,7 +1253,6 @@ class Zlib(Codec):
 
     def decode(self, buf, out=None):
         return imagecodecs.zlib_decode(buf, out=_flat(out))
-
 
 class Zlibng(Codec):
     """Zlibng codec for numcodecs."""
@@ -1312,7 +1268,6 @@ class Zlibng(Codec):
     def decode(self, buf, out=None):
         return imagecodecs.zlibng_decode(buf, out=_flat(out))
 
-
 class Zopfli(Codec):
     """Zopfli codec for numcodecs."""
 
@@ -1323,7 +1278,6 @@ class Zopfli(Codec):
 
     def decode(self, buf, out=None):
         return imagecodecs.zopfli_decode(buf, out=_flat(out))
-
 
 class Zstd(Codec):
     """ZStandard codec for numcodecs."""
@@ -1339,7 +1293,6 @@ class Zstd(Codec):
     def decode(self, buf, out=None):
         return imagecodecs.zstd_decode(buf, out=_flat(out))
 
-
 def _flat(out):
     """Return numpy array as contiguous view of bytes if possible."""
     if out is None:
@@ -1348,7 +1301,6 @@ def _flat(out):
     if view.readonly or not view.contiguous:
         return None
     return view.cast('B')
-
 
 def register_codecs(codecs=None, force=False, verbose=True):
     """Register codecs in this module with numcodecs."""
@@ -1376,7 +1328,6 @@ def register_codecs(codecs=None, force=False, verbose=True):
             if verbose:
                 log_warning(f'replacing registered numcodec {cls.codec_id!r}')
         register_codec(cls)
-
 
 def log_warning(msg, *args, **kwargs):
     """Log message with level WARNING."""
