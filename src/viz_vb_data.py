@@ -540,7 +540,7 @@ class CombinedVisualizer:
             center = pts.mean(axis=0)
             extent = pts.max(axis=0) - pts.min(axis=0)
             dist = max(np.max(extent) * 2.0, 0.3)
-            eye = center + np.array([-dist * 1.5, 0, dist * 0.3])
+            eye = center + np.array([-dist * 1.5, 0, dist * 0.05])
             cam_pose = _lookat_camera_pose(eye, center, [0, 0, 1])
 
         camera = pyrender.PerspectiveCamera(yfov=np.deg2rad(60.0))
