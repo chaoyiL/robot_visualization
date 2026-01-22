@@ -123,7 +123,7 @@ def calc_camera_params(points):
     center = pts.mean(axis=0)
     extent = pts.max(axis=0) - pts.min(axis=0)
     dist = max(np.max(extent) * 2.5, 1.0)
-    eye = center + np.array([dist * 0.5, -dist * 0.3, dist * 0.8])
+    eye = center + np.array([dist * 0.2, -dist * 0.1, dist * 1.2])
     return {'center': center.tolist(), 'eye': eye.tolist(), 'up': [0, 0, 1]}
 
 def resize_with_label(img, label, height, color=(255, 255, 255)):
@@ -230,24 +230,19 @@ def create_combined_image(data, frame_idx, pc_images, world_image, height=250):
         prefix = f'robot{r}'
         row_parts = []
         
-        # 点云图
-        pc_imgs = []
-        for side in ['left', 'right']:
-            key = f'{prefix}_{side}_pc'
-            if key in pc_images:
-                pc_imgs.append(resize_with_label(pc_images[key], f"R{r} {side.title()} PC", height, 
-                                                 (255, 255, 0) if side == 'left' else (0, 255, 255)))
-        if pc_imgs:
-            row_parts.append(hstack_with_sep(pc_imgs))
+        # 将所有图像放在一起水平拼接
+        all_imgs = []
         
         # 相机图像
-        cam_imgs = []
         for sensor, label in [('visual', 'Visual'), ('left_tactile', 'L-Tact'), ('right_tactile', 'R-Tact')]:
             imgs = data[prefix].get(sensor, [])
             if imgs and frame_idx < len(imgs):
-                cam_imgs.append(resize_with_label(imgs[frame_idx].copy(), f"R{r} {label}", height, colors[r]))
-        if cam_imgs:
-            row_parts.append(hstack_with_sep(cam_imgs))
+                all_imgs.append(resize_with_label(imgs[frame_idx].copy(), f"R{r} {label}", height, colors[r]))
+        
+        if all_imgs:
+            row_parts.append(hstack_with_sep(all_imgs))
+        
+        
         
         if row_parts:
             rows.append(hstack_with_sep(row_parts, sep_width=5, sep_color=128))
@@ -545,7 +540,7 @@ class CombinedVisualizer:
             center = pts.mean(axis=0)
             extent = pts.max(axis=0) - pts.min(axis=0)
             dist = max(np.max(extent) * 2.0, 0.3)
-            eye = center + np.array([dist * 0.6, -dist * 0.4, dist * 0.8])
+            eye = center + np.array([-dist * 1.5, 0, dist * 0.3])
             cam_pose = _lookat_camera_pose(eye, center, [0, 0, 1])
 
         camera = pyrender.PerspectiveCamera(yfov=np.deg2rad(60.0))
