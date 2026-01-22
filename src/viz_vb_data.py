@@ -286,6 +286,31 @@ def _lookat_camera_pose(eye, center, up):
     m[:3, 3] = -m[:3, :3] @ eye
     return np.linalg.inv(m)
 
+def _quest_controller_mesh(is_left=True):
+    """加载Quest手柄STL模型"""
+    import os
+    mesh_file = 'src/meshes/Oculus_Meta_Quest_Touch_Plus_Controller_Left.stl' if is_left else 'src/meshes/Oculus_Meta_Quest_Touch_Plus_Controller_Right.stl'
+    
+    if not os.path.exists(mesh_file):
+        # 如果文件不存在，返回简单圆柱体
+        cyl = trimesh.creation.cylinder(radius=0.02, height=0.15, sections=16)
+        rgba = np.array([0.3, 0.3, 0.8, 1.0])
+        cyl.visual.vertex_colors = (rgba * 255).astype(np.uint8)
+        return pyrender.Mesh.from_trimesh(cyl, smooth=False)
+    
+    # 加载STL
+    mesh = trimesh.load(mesh_file)
+    
+    # 调整大小（Quest手柄实际尺寸较大，可能需要缩放）
+    scale = 0.001  # STL单位可能是mm，转为m
+    mesh.apply_scale(scale)
+    
+    # 设置颜色
+    rgba = np.array([0.3, 0.3, 0.8, 1.0])
+    mesh.visual.vertex_colors = (rgba * 255).astype(np.uint8)
+    
+    return pyrender.Mesh.from_trimesh(mesh, smooth=True)
+
 def _axis_mesh(size=0.05):
     axis = trimesh.creation.axis(origin_size=size * 0.2, axis_length=size)
     return pyrender.Mesh.from_trimesh(axis, smooth=False)
@@ -329,6 +354,72 @@ def _placeholder_cad_box():
     box = trimesh.creation.box(extents=[0.03, 0.1, 0.03])
     box.visual.vertex_colors = np.tile(np.array([180, 180, 180, 255], dtype=np.uint8), (len(box.vertices), 1))
     return pyrender.Mesh.from_trimesh(box, smooth=False)
+
+def load_controller_mesh(is_left=True):
+    """加载Quest手柄STL"""
+    import os
+    filename = 'controller_left_simple.stl' if is_left else 'controller_right_simple.stl'
+    filepath = os.path.join('src', 'meshes', filename)
+    
+    if not os.path.exists(filepath):
+        return None
+    
+    mesh = trimesh.load(filepath)
+    mesh.apply_scale(0.002)  # mm转m，放大2倍
+    mesh.visual.vertex_colors = np.array([100, 100, 200, 255], dtype=np.uint8)
+    
+    return pyrender.Mesh.from_trimesh(mesh, smooth=True)
+
+def load_gripper_mesh():
+    """加载真实夹爪STL模型"""
+    import os
+    filepath = 'src/meshes/夹爪.STL'
+    
+    if not os.path.exists(filepath):
+        return None
+    
+    mesh = trimesh.load(filepath)
+    mesh.apply_scale(0.002)  # mm转m，放大2倍
+    
+    # 将模型中心移到原点
+    center = (mesh.bounds[0] + mesh.bounds[1]) / 2
+    mesh.apply_translation(-center)
+    
+    # 设置颜色
+    mesh.visual.vertex_colors = np.array([180, 180, 180, 255], dtype=np.uint8)
+    
+    return pyrender.Mesh.from_trimesh(mesh, smooth=True)
+
+
+
+def load_gripper_pair():
+    """加载一对对称的夹爪"""
+    import os
+    filepath = 'src/meshes/夹爪.STL'
+    
+    if not os.path.exists(filepath):
+        return None, None
+    
+    mesh_base = trimesh.load(filepath)
+    mesh_base.apply_scale(0.002)
+    center = (mesh_base.bounds[0] + mesh_base.bounds[1]) / 2
+    mesh_base.apply_translation(-center)
+    
+    # 左夹爪
+    mesh_left = mesh_base.copy()
+    mesh_left.visual.vertex_colors = np.array([180, 180, 180, 255], dtype=np.uint8)
+    left_gripper = pyrender.Mesh.from_trimesh(mesh_left, smooth=True)
+    
+    # 右夹爪（Y轴镜像）
+    mesh_right = mesh_base.copy()
+    mirror = np.eye(4)
+    mirror[1, 1] = -1
+    mesh_right.apply_transform(mirror)
+    mesh_right.visual.vertex_colors = np.array([180, 180, 180, 255], dtype=np.uint8)
+    right_gripper = pyrender.Mesh.from_trimesh(mesh_right, smooth=True)
+    
+    return left_gripper, right_gripper
+
 
 def _gripper_boxes(opening_width, color=(1.0, 0.0, 0.0)):
     """Create two symmetric gripper boxes around the tool frame.
@@ -479,6 +570,18 @@ class CombinedVisualizer:
             (left_mesh, left_pose), (right_mesh, right_pose) = _gripper_boxes(gripper_width)
             scene.add(left_mesh, pose=frame_pose @ left_pose)
             scene.add(right_mesh, pose=frame_pose @ right_pose)
+            
+            # Quest手柄（垂直向上）
+            ctrl = _quest_controller_mesh(is_left=(r==0))
+            if ctrl:
+                from scipy.spatial.transform import Rotation
+                ctrl_tf = np.eye(4)
+                # 旋转90度使其垂直
+                rot = Rotation.from_euler('y', 90, degrees=True).as_matrix()
+                ctrl_tf[:3, :3] = rot
+                ctrl_tf[:3, 3] = [0, 0, 0.03]  # 在底座上方
+                scene.add(ctrl, pose=frame_pose @ ctrl_tf)
+                
 
         origin_axis = _axis_mesh(size=0.03)
         scene.add(origin_axis, pose=np.eye(4))
@@ -529,9 +632,51 @@ class CombinedVisualizer:
 
             gripper = self.data[prefix].get('gripper', [])
             if gripper and current_idx < len(gripper):
-                (left_mesh, left_pose), (right_mesh, right_pose) = _gripper_boxes(float(gripper[current_idx]))
-                scene.add(left_mesh, pose=frame_pose @ left_pose)
-                scene.add(right_mesh, pose=frame_pose @ right_pose)
+                # 加载一对真实夹爪
+                left_gripper, right_gripper = load_gripper_pair()
+                if left_gripper and right_gripper:
+                    # 左夹爪
+                    left_tf = np.eye(4)
+                    left_tf[:3, 3] = [0.05, -0.06, -0.03]
+                    scene.add(left_gripper, pose=frame_pose @ left_tf)
+                    
+                    # 右夹爪
+                    right_tf = np.eye(4)
+                    right_tf[:3, 3] = [0.05, 0.06, -0.03]
+                    scene.add(right_gripper, pose=frame_pose @ right_tf)
+                else:
+                    # 备用
+                    (left_mesh, left_pose), (right_mesh, right_pose) = _gripper_boxes(float(gripper[current_idx]))
+                    scene.add(left_mesh, pose=frame_pose @ left_pose)
+                    scene.add(right_mesh, pose=frame_pose @ right_pose)
+            
+            # 手腕连接件（圆柱）
+            wrist = trimesh.creation.cylinder(radius=0.02, height=0.04, sections=16)
+            wrist.visual.vertex_colors = np.array([150, 150, 150, 255], dtype=np.uint8)
+            wrist_mesh = pyrender.Mesh.from_trimesh(wrist, smooth=False)
+            wrist_tf = np.eye(4)
+            wrist_tf[:3, 3] = [0, 0, 0.01]  # 手柄下方
+            scene.add(wrist_mesh, pose=frame_pose @ wrist_tf)
+            
+            # 夹爪底座
+            base = trimesh.creation.box(extents=[0.04, 0.16, 0.025])
+            base.visual.vertex_colors = np.array([130, 130, 130, 255], dtype=np.uint8)
+            base_mesh = pyrender.Mesh.from_trimesh(base, smooth=False)
+            base_tf = np.eye(4)
+            base_tf[:3, 3] = [0, 0, -0.01]  # 手腕下方
+            scene.add(base_mesh, pose=frame_pose @ base_tf)
+            
+            # Quest手柄（垂直向上）
+            ctrl = _quest_controller_mesh(is_left=(r==0))
+            if ctrl:
+                from scipy.spatial.transform import Rotation
+                ctrl_tf = np.eye(4)
+                # 旋转90度使其垂直
+                rot = Rotation.from_euler('y', 90, degrees=True).as_matrix()
+                ctrl_tf[:3, :3] = rot
+                ctrl_tf[:3, 3] = [0, 0, 0.03]  # 在底座上方
+                scene.add(ctrl, pose=frame_pose @ ctrl_tf)
+                
 
         if not all_pts:
             cam_pose = _lookat_camera_pose([0.5, -0.3, 0.8], [0, 0, 0], [0, 0, 1])
@@ -736,3 +881,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
