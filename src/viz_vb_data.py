@@ -41,55 +41,6 @@ SENSOR_KEY_CANDIDATES = {
         'camera{}_right_tactile_points',
     ],
 }
-def transform_quest_to_robot(quest_pos, quest_rot_axis_angle):
-    """
-    将Quest左手坐标系转换为机器人右手坐标系
-    
-    Quest左手系（Unity风格）:
-        +X: 右
-        +Y: 上
-        +Z: 前
-    
-    机器人右手系（ROS标准）:
-        +X: 前
-        +Y: 左
-        +Z: 上
-    
-    转换分两步：
-    1. 左手系→右手系：翻转Z轴
-    2. 坐标轴重映射：Quest(右,上,后) → Robot(前,左,上)
-    """
-    
-    # 步骤1：左手系→右手系（翻转Z轴）
-    # Quest左手(x右, y上, z前) → Quest右手(x右, y上, z后)
-    quest_pos_rh = quest_pos.copy()
-    quest_pos_rh[2] = -quest_pos_rh[2]  # 翻转Z
-    
-    # 步骤2：坐标轴重映射
-    # Quest右手(x右, y上, z后) → Robot(x前, y左, z上)
-    T = np.array([
-        [ 0,  0, -1],  # Robot_X = -Quest_Z (Quest后→Robot前)
-        [-1,  0,  0],  # Robot_Y = -Quest_X (Quest右→Robot左)
-        [ 0,  1,  0]   # Robot_Z =  Quest_Y (Quest上→Robot上)
-    ])
-    
-    robot_pos = quest_pos_rh @ T.T
-    
-    # 旋转转换
-    # 步骤1：左手系旋转→右手系旋转
-    quest_rot_rh = quest_rot_axis_angle.copy()
-    quest_rot_rh[2] = -quest_rot_rh[2]  # 翻转Z轴的旋转分量
-    
-    # 步骤2：应用坐标轴重映射
-    from scipy.spatial.transform import Rotation
-    quest_rot = Rotation.from_rotvec(quest_rot_rh)
-    quest_rot_matrix = quest_rot.as_matrix()
-    
-    robot_rot_matrix = T @ quest_rot_matrix @ T.T
-    robot_rot = Rotation.from_matrix(robot_rot_matrix)
-    robot_rot_axis_angle = robot_rot.as_rotvec()
-    
-    return robot_pos, robot_rot_axis_angle
 def get_transform(pos, rot_axis_angle):
     """获取变换矩阵"""
     rotation_matrix, _ = cv2.Rodrigues(rot_axis_angle)
@@ -189,12 +140,9 @@ def load_episode_data(replay_buffer, episode_idx):
             
             # 加载位姿
             if r == 0 or has['robot1_pose']:
-                # 从数据中读取Quest左手坐标
-                quest_pos = replay_buffer[f'robot{r}_eef_pos'][i]
-                quest_rot = replay_buffer[f'robot{r}_eef_rot_axis_angle'][i]
-                
-                # 转换到机器人右手坐标系
-                pos, rot = transform_quest_to_robot(quest_pos, quest_rot)
+                # 直接使用数据（已经是右手坐标系）
+                pos = replay_buffer[f'robot{r}_eef_pos'][i]
+                rot = replay_buffer[f'robot{r}_eef_rot_axis_angle'][i]
                 
                 # 生成变换矩阵
                 tx = get_transform(pos, rot)
@@ -572,7 +520,7 @@ class CombinedVisualizer:
             scene.add(right_mesh, pose=frame_pose @ right_pose)
             
             # Quest手柄（垂直向上）
-            ctrl = _quest_controller_mesh(is_left=(r==0))
+            ctrl = _quest_controller_mesh(is_left=(r==1))  # 左手装右手柄，右手装左手柄
             if ctrl:
                 from scipy.spatial.transform import Rotation
                 ctrl_tf = np.eye(4)
@@ -667,7 +615,7 @@ class CombinedVisualizer:
             scene.add(base_mesh, pose=frame_pose @ base_tf)
             
             # Quest手柄（垂直向上）
-            ctrl = _quest_controller_mesh(is_left=(r==0))
+            ctrl = _quest_controller_mesh(is_left=(r==1))  # 左手装右手柄，右手装左手柄
             if ctrl:
                 from scipy.spatial.transform import Rotation
                 ctrl_tf = np.eye(4)

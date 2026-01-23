@@ -13,6 +13,7 @@ class Enhanced3DVisualizer(CombinedVisualizer):
     def __init__(self, *args, **kwargs):
         self.window_name = "Robot Monitor"
         self.playback_speed = 1.0
+        self.auto_next_episode = True  # 自动播放下一个Episode
         super().__init__(*args, **kwargs)
     
     def _create_realistic_quest_controller(self, is_left=True):
@@ -55,7 +56,6 @@ class Enhanced3DVisualizer(CombinedVisualizer):
         meshes = []
         radius = 0.002
         
-        # X方向的线
         for y in np.arange(-size, size + step, step):
             line = trimesh.creation.cylinder(radius=radius, height=size*2, sections=8)
             line.visual.vertex_colors = np.array([100, 120, 140, 255], dtype=np.uint8)
@@ -64,7 +64,6 @@ class Enhanced3DVisualizer(CombinedVisualizer):
             line.apply_translation([0, y, 0.001])
             meshes.append(line)
         
-        # Y方向的线
         for x in np.arange(-size, size + step, step):
             line = trimesh.creation.cylinder(radius=radius, height=size*2, sections=8)
             line.visual.vertex_colors = np.array([100, 120, 140, 255], dtype=np.uint8)
@@ -133,12 +132,10 @@ class Enhanced3DVisualizer(CombinedVisualizer):
         
         scene = pyrender.Scene(bg_color=[0.05, 0.08, 0.12, 1.0])
         
-        # 添加地面网格
         floor_grid = self._create_floor_grid_solid(size=1.5, step=0.2)
         if floor_grid:
             scene.add(floor_grid)
         
-        # 添加坐标轴
         coord_axes = self._create_coordinate_axes(length=0.2)
         for axis_mesh in coord_axes:
             scene.add(axis_mesh)
@@ -165,8 +162,6 @@ class Enhanced3DVisualizer(CombinedVisualizer):
                 scene.add(pts_mesh)
 
             frame_pose = poses[current_idx]
-            
-            # 组合旋转变换
             combined_rotation = Rotation.from_euler('xz', [180, 90], degrees=True).as_matrix()
             flip_tf = np.eye(4)
             flip_tf[:3, :3] = combined_rotation
@@ -174,8 +169,7 @@ class Enhanced3DVisualizer(CombinedVisualizer):
             
             scene.add(_axis_mesh(size=0.05), pose=flipped_pose)
             
-            # Quest手柄
-            ctrl = self._create_realistic_quest_controller(is_left=(r==0))
+            ctrl = self._create_realistic_quest_controller(is_left=(r==1))
             if ctrl:
                 ctrl_tf = np.eye(4)
                 rot = Rotation.from_euler('y', 90, degrees=True).as_matrix()
@@ -183,7 +177,6 @@ class Enhanced3DVisualizer(CombinedVisualizer):
                 ctrl_tf[:3, 3] = [0, 0, 0.05]
                 scene.add(ctrl, pose=flipped_pose @ ctrl_tf)
             
-            # 手腕连接
             wrist = trimesh.creation.cylinder(radius=0.02, height=0.03, sections=16)
             wrist.visual.vertex_colors = np.array([180, 180, 180, 255], dtype=np.uint8)
             wrist_mesh = pyrender.Mesh.from_trimesh(wrist, smooth=True)
@@ -191,7 +184,6 @@ class Enhanced3DVisualizer(CombinedVisualizer):
             wrist_tf[:3, 3] = [0, 0, 0.01]
             scene.add(wrist_mesh, pose=flipped_pose @ wrist_tf)
             
-            # 夹爪底座
             base = trimesh.creation.box(extents=[0.08, 0.04, 0.02])
             base.visual.vertex_colors = np.array([200, 200, 200, 255], dtype=np.uint8)
             base_mesh = pyrender.Mesh.from_trimesh(base, smooth=False)
@@ -199,14 +191,12 @@ class Enhanced3DVisualizer(CombinedVisualizer):
             base_tf[:3, 3] = [0, 0, -0.02]
             scene.add(base_mesh, pose=flipped_pose @ base_tf)
             
-            # STL夹爪
             gripper = self.data[prefix].get('gripper', [])
             if gripper and current_idx < len(gripper):
                 grip_width = float(gripper[current_idx])
                 offset = max(grip_width * 0.5, 0.03)
                 
                 if gripper_base_mesh is not None:
-                    # 左夹爪
                     left_gripper = gripper_base_mesh.copy()
                     left_gripper.visual.vertex_colors = np.array([180, 180, 180, 255], dtype=np.uint8)
                     left_gripper_mesh = pyrender.Mesh.from_trimesh(left_gripper, smooth=True)
@@ -214,7 +204,6 @@ class Enhanced3DVisualizer(CombinedVisualizer):
                     left_tf[:3, 3] = [0.02, -offset, -0.04]
                     scene.add(left_gripper_mesh, pose=flipped_pose @ left_tf)
                     
-                    # 右夹爪
                     right_gripper = gripper_base_mesh.copy()
                     mirror = np.eye(4)
                     mirror[1, 1] = -1
@@ -225,7 +214,6 @@ class Enhanced3DVisualizer(CombinedVisualizer):
                     right_tf[:3, 3] = [0.02, offset, -0.04]
                     scene.add(right_gripper_mesh, pose=flipped_pose @ right_tf)
                 
-                # 触觉传感器
                 for side, sign, color_rgb in [('left', -1, [0, 255, 0]), ('right', 1, [255, 0, 0])]:
                     sensor = trimesh.creation.cylinder(radius=0.012, height=0.003, sections=16)
                     sensor.visual.vertex_colors = np.array(color_rgb + [255], dtype=np.uint8)
@@ -235,7 +223,6 @@ class Enhanced3DVisualizer(CombinedVisualizer):
                     sensor_tf[:3, 3] = [0.05, sign * (offset - 0.01), -0.04]
                     scene.add(sensor_mesh, pose=flipped_pose @ sensor_tf)
 
-        # 相机设置
         if not all_pts:
             cam_pose = _lookat_camera_pose([0.5, -0.3, 0.8], [0, 0, 0.3], [0, 0, 1])
         else:
@@ -249,11 +236,9 @@ class Enhanced3DVisualizer(CombinedVisualizer):
         camera = pyrender.PerspectiveCamera(yfov=np.deg2rad(60.0))
         scene.add(camera, pose=cam_pose)
         
-        # 主光源
         main_light = pyrender.DirectionalLight(color=np.ones(3), intensity=5.0)
         scene.add(main_light, pose=cam_pose)
         
-        # 补光
         fill_pose = cam_pose.copy()
         fill_pose[:3, 3] = -cam_pose[:3, 3]
         fill_light = pyrender.DirectionalLight(color=[0.8, 0.9, 1.0], intensity=2.0)
@@ -263,28 +248,26 @@ class Enhanced3DVisualizer(CombinedVisualizer):
         return color_img[:, :, :3]
     
     def _create_trajectory_plots(self, frame_idx):
-        """创建轨迹曲线图面板"""
+        """创建轨迹曲线图面板 - 虚线预览+实线高亮"""
         w, h = 450, 750
         panel = np.zeros((h, w, 3), dtype=np.uint8)
         panel[:] = [25, 30, 40]
         
-        # 标题
         cv2.rectangle(panel, (0, 0), (w, 40), (15, 20, 30), -1)
         cv2.putText(panel, "Real-time Trajectories", (15, 28), 
                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (220, 220, 220), 1, cv2.LINE_AA)
         
         y_offset = 50
-        plot_h = 100
-        plot_w = w - 30
+        plot_h = 110
+        plot_w = w - 50
+        plot_x_start = 40
         
         max_frames = len(self.data['robot0']['poses'])
-        window_size = min(100, max_frames)
-        start_idx = max(0, frame_idx - window_size + 1)
         
         plots = [
-            ("Robot 0 Position", ['robot0'], ['X', 'Y', 'Z'], [(255, 100, 100), (100, 255, 100), (100, 100, 255)]),
-            ("Robot 1 Position", ['robot1'], ['X', 'Y', 'Z'], [(255, 100, 100), (100, 255, 100), (100, 100, 255)]),
-            ("Gripper Width", ['robot0', 'robot1'], ['R0', 'R1'], [(255, 100, 100), (100, 255, 100)])
+            ("Robot 0 Position (m)", ['robot0'], ['X', 'Y', 'Z'], [(255, 100, 100), (100, 255, 100), (100, 100, 255)]),
+            ("Robot 1 Position (m)", ['robot1'], ['X', 'Y', 'Z'], [(255, 100, 100), (100, 255, 100), (100, 100, 255)]),
+            ("Gripper Width (m)", ['robot0', 'robot1'], ['R0', 'R1'], [(255, 100, 100), (100, 255, 100)])
         ]
         
         for plot_name, robots, labels, colors in plots:
@@ -292,37 +275,56 @@ class Enhanced3DVisualizer(CombinedVisualizer):
                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (200, 200, 200), 1, cv2.LINE_AA)
             y_offset += 20
             
-            # 绘制图表背景
-            cv2.rectangle(panel, (15, y_offset), (15 + plot_w, y_offset + plot_h), 
+            cv2.rectangle(panel, (plot_x_start, y_offset), (plot_x_start + plot_w, y_offset + plot_h - 20), 
                          (35, 40, 50), -1)
-            cv2.rectangle(panel, (15, y_offset), (15 + plot_w, y_offset + plot_h), 
+            cv2.rectangle(panel, (plot_x_start, y_offset), (plot_x_start + plot_w, y_offset + plot_h - 20), 
                          (60, 65, 75), 1)
             
             if "Position" in plot_name:
-                # 位置曲线
                 robot_id = 0 if "Robot 0" in plot_name else 1
                 prefix = f'robot{robot_id}'
                 poses = self.data[prefix].get('poses', [])
                 
-                if poses and frame_idx < len(poses):
-                    positions = np.array([poses[i][:3, 3] for i in range(start_idx, frame_idx + 1)])
+                if poses and len(poses) > 0:
+                    all_positions = np.array([poses[i][:3, 3] for i in range(len(poses))])
                     
                     for axis_idx, (axis_name, color) in enumerate(zip(labels, colors)):
-                        if len(positions) > 1:
-                            data = positions[:, axis_idx]
+                        if len(all_positions) > 1:
+                            data = all_positions[:, axis_idx]
                             data_min, data_max = data.min(), data.max()
                             data_range = data_max - data_min if data_max > data_min else 1.0
                             
-                            # 绘制曲线
+                            # 虚线（整条轨迹）
                             for i in range(1, len(data)):
-                                x1 = int(15 + (i - 1) / window_size * plot_w)
-                                y1 = int(y_offset + plot_h - ((data[i-1] - data_min) / data_range) * (plot_h - 10))
-                                x2 = int(15 + i / window_size * plot_w)
-                                y2 = int(y_offset + plot_h - ((data[i] - data_min) / data_range) * (plot_h - 10))
+                                x1 = int(plot_x_start + (i - 1) / max_frames * plot_w)
+                                y1 = int(y_offset + (plot_h - 20) - ((data[i-1] - data_min) / data_range) * (plot_h - 30))
+                                x2 = int(plot_x_start + i / max_frames * plot_w)
+                                y2 = int(y_offset + (plot_h - 20) - ((data[i] - data_min) / data_range) * (plot_h - 30))
+                                dark_color = tuple(int(c * 0.3) for c in color)
+                                cv2.line(panel, (x1, y1), (x2, y2), dark_color, 1, cv2.LINE_AA)
+                            
+                            # 实线（当前进度）
+                            for i in range(1, min(frame_idx + 1, len(data))):
+                                x1 = int(plot_x_start + (i - 1) / max_frames * plot_w)
+                                y1 = int(y_offset + (plot_h - 20) - ((data[i-1] - data_min) / data_range) * (plot_h - 30))
+                                x2 = int(plot_x_start + i / max_frames * plot_w)
+                                y2 = int(y_offset + (plot_h - 20) - ((data[i] - data_min) / data_range) * (plot_h - 30))
                                 cv2.line(panel, (x1, y1), (x2, y2), color, 2, cv2.LINE_AA)
+                            
+                            # Y轴标签
+                            cv2.putText(panel, f"{data_max:.3f}", (5, y_offset + 10), 
+                                       cv2.FONT_HERSHEY_SIMPLEX, 0.3, (150, 150, 150), 1, cv2.LINE_AA)
+                            cv2.putText(panel, f"{data_min:.3f}", (5, y_offset + plot_h - 25), 
+                                       cv2.FONT_HERSHEY_SIMPLEX, 0.3, (150, 150, 150), 1, cv2.LINE_AA)
+                    
+                    # X轴标签
+                    cv2.putText(panel, "0", (plot_x_start, y_offset + plot_h - 5), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.3, (150, 150, 150), 1, cv2.LINE_AA)
+                    cv2.putText(panel, f"{max_frames}", (plot_x_start + plot_w - 20, y_offset + plot_h - 5), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.3, (150, 150, 150), 1, cv2.LINE_AA)
                     
                     # 图例
-                    legend_x = 20
+                    legend_x = plot_x_start + 5
                     for axis_name, color in zip(labels, colors):
                         cv2.circle(panel, (legend_x, y_offset + 10), 4, color, -1)
                         cv2.putText(panel, axis_name, (legend_x + 10, y_offset + 13), 
@@ -330,33 +332,54 @@ class Enhanced3DVisualizer(CombinedVisualizer):
                         legend_x += 40
             
             elif "Gripper" in plot_name:
-                # 夹爪曲线
                 for robot_idx, (robot_prefix, label, color) in enumerate(zip(robots, labels, colors)):
                     gripper_data = self.data[robot_prefix].get('gripper', [])
                     
-                    if gripper_data and frame_idx < len(gripper_data):
-                        grippers = np.array([gripper_data[i] for i in range(start_idx, min(frame_idx + 1, len(gripper_data)))])
+                    if gripper_data and len(gripper_data) > 0:
+                        all_grippers = np.array([gripper_data[i] for i in range(len(gripper_data))])
                         
-                        if len(grippers) > 1:
-                            data_min, data_max = grippers.min(), grippers.max()
+                        if len(all_grippers) > 1:
+                            data_min, data_max = all_grippers.min(), all_grippers.max()
                             data_range = data_max - data_min if data_max > data_min else 0.01
                             
-                            for i in range(1, len(grippers)):
-                                x1 = int(15 + (i - 1) / window_size * plot_w)
-                                y1 = int(y_offset + plot_h - ((grippers[i-1] - data_min) / data_range) * (plot_h - 10))
-                                x2 = int(15 + i / window_size * plot_w)
-                                y2 = int(y_offset + plot_h - ((grippers[i] - data_min) / data_range) * (plot_h - 10))
+                            # 虚线（全部）
+                            for i in range(1, len(all_grippers)):
+                                x1 = int(plot_x_start + (i - 1) / max_frames * plot_w)
+                                y1 = int(y_offset + (plot_h - 20) - ((all_grippers[i-1] - data_min) / data_range) * (plot_h - 30))
+                                x2 = int(plot_x_start + i / max_frames * plot_w)
+                                y2 = int(y_offset + (plot_h - 20) - ((all_grippers[i] - data_min) / data_range) * (plot_h - 30))
+                                dark_color = tuple(int(c * 0.3) for c in color)
+                                cv2.line(panel, (x1, y1), (x2, y2), dark_color, 1, cv2.LINE_AA)
+                            
+                            # 实线（当前）
+                            for i in range(1, min(frame_idx + 1, len(all_grippers))):
+                                x1 = int(plot_x_start + (i - 1) / max_frames * plot_w)
+                                y1 = int(y_offset + (plot_h - 20) - ((all_grippers[i-1] - data_min) / data_range) * (plot_h - 30))
+                                x2 = int(plot_x_start + i / max_frames * plot_w)
+                                y2 = int(y_offset + (plot_h - 20) - ((all_grippers[i] - data_min) / data_range) * (plot_h - 30))
                                 cv2.line(panel, (x1, y1), (x2, y2), color, 2, cv2.LINE_AA)
+                            
+                            # Y轴标签
+                            cv2.putText(panel, f"{data_max:.4f}", (5, y_offset + 10), 
+                                       cv2.FONT_HERSHEY_SIMPLEX, 0.28, (150, 150, 150), 1, cv2.LINE_AA)
+                            cv2.putText(panel, f"{data_min:.4f}", (5, y_offset + plot_h - 25), 
+                                       cv2.FONT_HERSHEY_SIMPLEX, 0.28, (150, 150, 150), 1, cv2.LINE_AA)
+                
+                # X轴标签
+                cv2.putText(panel, "0", (plot_x_start, y_offset + plot_h - 5), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.3, (150, 150, 150), 1, cv2.LINE_AA)
+                cv2.putText(panel, f"{max_frames}", (plot_x_start + plot_w - 20, y_offset + plot_h - 5), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.3, (150, 150, 150), 1, cv2.LINE_AA)
                 
                 # 图例
-                legend_x = 20
+                legend_x = plot_x_start + 5
                 for label, color in zip(labels, colors):
                     cv2.circle(panel, (legend_x, y_offset + 10), 4, color, -1)
                     cv2.putText(panel, label, (legend_x + 10, y_offset + 13), 
                                cv2.FONT_HERSHEY_SIMPLEX, 0.35, (200, 200, 200), 1, cv2.LINE_AA)
                     legend_x += 50
             
-            y_offset += plot_h + 25
+            y_offset += plot_h + 15
         
         return panel
     
@@ -398,16 +421,13 @@ class Enhanced3DVisualizer(CombinedVisualizer):
         header = np.zeros((h, w, 3), dtype=np.uint8)
         header[:] = [20, 25, 35]
         
-        # 标题
         cv2.putText(header, "Robot Monitor", (20, 38), 
                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2, cv2.LINE_AA)
         
-        # 状态指示灯
         cv2.circle(header, (250, 30), 6, (100, 255, 100), -1)
         cv2.putText(header, f"Speed: {self.playback_speed}x", (270, 38), 
                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (150, 150, 150), 1, cv2.LINE_AA)
         
-        # 右侧信息
         ep_id, max_frames = self.episodes[self.ep_idx], len(self.data['robot0']['poses'])
         cv2.putText(header, f"Ep {ep_id}/{len(self.episodes)} | Frame {frame_idx}/{max_frames-1}", 
                    (w - 400, 38), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1, cv2.LINE_AA)
@@ -444,7 +464,6 @@ class Enhanced3DVisualizer(CombinedVisualizer):
         max_frames = len(self.data['robot0']['poses'])
         bar_x1, bar_x2, bar_y = 200, w - 450, 30
         
-        # 进度条
         cv2.rectangle(bar, (bar_x1, bar_y-4), (bar_x2, bar_y+4), (50, 55, 65), -1)
         if max_frames > 1:
             progress = int((frame_idx / (max_frames-1)) * (bar_x2 - bar_x1))
@@ -467,7 +486,6 @@ class Enhanced3DVisualizer(CombinedVisualizer):
         for i, speed in enumerate(speeds):
             btn_x = speed_x + i * (btn_w + 5)
             
-            # 当前选中的速度高亮
             if abs(self.playback_speed - speed) < 0.01:
                 btn_color = (59, 130, 246)
             else:
@@ -484,7 +502,6 @@ class Enhanced3DVisualizer(CombinedVisualizer):
             cv2.putText(bar, label, (text_x, btn_y + 17), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.35, (220, 220, 220), 1, cv2.LINE_AA)
         
-        # 控制说明
         controls = "[A/D]Frame [W/S]Ep [P]Play [1-5]Speed [R]Reset [C]Shot [Q]Quit"
         cv2.putText(bar, controls, (20, 68), 
                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, (120, 120, 120), 1, cv2.LINE_AA)
@@ -522,16 +539,17 @@ class Enhanced3DVisualizer(CombinedVisualizer):
         frame_counter = 0
         
         print("\n" + "=" * 70)
-        print("  Robot Monitor - Teleoperation Visualization")
+        print("  Robot Monitor")
         print("=" * 70)
         print("  Controls:")
-        print("    [A/D]    Frame navigation")
-        print("    [W/S]    Episode navigation")
-        print("    [P]      Auto-play toggle")
-        print("    [1-5]    Speed: 0.25x, 0.5x, 1x, 2x, 5x")
-        print("    [R]      Reset view")
-        print("    [C]      Screenshot")
-        print("    [Q]      Quit")
+        print("    [A/D]    前后帧")
+        print("    [W]      下一个Episode")
+        print("    [S]      上一个Episode")
+        print("    [P]      自动播放（Episode结束后自动跳转下一个）")
+        print("    [1-5]    速度: 0.25x, 0.5x, 1x, 2x, 5x")
+        print("    [R]      重置视角")
+        print("    [C]      截图")
+        print("    [Q]      退出")
         print("=" * 70 + "\n")
         
         while True:
@@ -548,45 +566,78 @@ class Enhanced3DVisualizer(CombinedVisualizer):
                     steps = int(frame_counter)
                     frame_counter -= steps
                     
-                    if self.frame_idx + steps < len(self.data['robot0']['poses']):
+                    max_f = len(self.data['robot0']['poses'])
+                    
+                    if self.frame_idx + steps < max_f:
+                        # 正常前进
                         self.frame_idx += steps
                     else:
-                        self.frame_idx = len(self.data['robot0']['poses']) - 1
-                        auto_play = False
+                        # 到达当前Episode末尾
+                        if self.auto_next_episode and self.ep_idx < len(self.episodes) - 1:
+                            # 自动跳转下一个Episode
+                            print(f"Episode {self.episodes[self.ep_idx]} 完成，自动加载下一个...")
+                            self.ep_idx += 1
+                            self.load_episode()
+                            frame_counter = 0
+                        else:
+                            # 最后一个Episode或关闭自动跳转
+                            self.frame_idx = max_f - 1
+                            auto_play = False
+                            print("播放完成")
             
             key = cv2.waitKey(30) & 0xFF
             
-            if key == ord('d') and self.frame_idx < len(self.data['robot0']['poses']) - 1: 
-                self.frame_idx += 1
-            elif key == ord('a') and self.frame_idx > 0: 
-                self.frame_idx -= 1
-            elif key == ord('w') and self.ep_idx < len(self.episodes) - 1: 
-                self.ep_idx += 1
-                self.load_episode()
-            elif key == ord('s') and self.ep_idx > 0: 
-                self.ep_idx -= 1
-                self.load_episode()
+            if key == ord('d'):
+                # D键：下一帧，如果到末尾自动下一个Episode
+                max_f = len(self.data['robot0']['poses'])
+                if self.frame_idx < max_f - 1:
+                    self.frame_idx += 1
+                elif self.ep_idx < len(self.episodes) - 1:
+                    self.ep_idx += 1
+                    self.load_episode()
+                    print(f"跳转到 Episode {self.episodes[self.ep_idx]}")
+                    
+            elif key == ord('a'):
+                # A键：上一帧
+                if self.frame_idx > 0:
+                    self.frame_idx -= 1
+                    
+            elif key == ord('w'):
+                # W键：下一个Episode（修正）
+                if self.ep_idx < len(self.episodes) - 1:
+                    self.ep_idx += 1
+                    self.load_episode()
+                    print(f"跳转到 Episode {self.episodes[self.ep_idx]}")
+                else:
+                    print("已经是最后一个Episode")
+                    
+            elif key == ord('s'):
+                # S键：上一个Episode（修正）
+                if self.ep_idx > 0:
+                    self.ep_idx -= 1
+                    self.load_episode()
+                    print(f"跳转到 Episode {self.episodes[self.ep_idx]}")
+                else:
+                    print("已经是第一个Episode")
+                    
             elif key == ord('p'): 
                 auto_play = not auto_play
                 frame_counter = 0
-            elif key == ord('1'): 
-                self.playback_speed = 0.25
-            elif key == ord('2'): 
-                self.playback_speed = 0.5
-            elif key == ord('3'): 
-                self.playback_speed = 1.0
-            elif key == ord('4'): 
-                self.playback_speed = 2.0
-            elif key == ord('5'): 
-                self.playback_speed = 5.0
-            elif key == ord('r'): 
-                self.setup_camera_params()
+                print(f"自动播放: {'开启' if auto_play else '关闭'}")
+                
+            elif key == ord('1'): self.playback_speed = 0.25; print("速度: 0.25x")
+            elif key == ord('2'): self.playback_speed = 0.5; print("速度: 0.5x")
+            elif key == ord('3'): self.playback_speed = 1.0; print("速度: 1x")
+            elif key == ord('4'): self.playback_speed = 2.0; print("速度: 2x")
+            elif key == ord('5'): self.playback_speed = 5.0; print("速度: 5x")
+            elif key == ord('r'): self.setup_camera_params(); print("视角重置")
             elif key == ord('c'):
                 import datetime
-                cv2.imwrite(f"monitor_{datetime.datetime.now().strftime('%H%M%S')}.png", cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
-                print("Screenshot saved")
+                filename = f"monitor_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+                cv2.imwrite(filename, cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+                print(f"截图: {filename}")
             elif key == ord('q'): 
-                print("\nDone\n")
+                print("\n退出\n")
                 break
         
         cv2.destroyAllWindows()
@@ -612,7 +663,7 @@ def main():
     store = ZipStore(args.zarr_path, mode='r')
     try:
         rb = ReplayBuffer.create_from_group(zarr.open_group(store=store, mode='r'))
-        print(f"Loaded: {rb.n_steps:,} frames, {rb.n_episodes} episodes\n")
+        print(f"加载: {rb.n_steps:,} 帧, {rb.n_episodes} episodes\n")
         Enhanced3DVisualizer(rb, np.arange(rb.n_episodes), args.record, args.record_episode, args.output_video, args.fps, args.continue_after_record)
     finally:
         store.close()
