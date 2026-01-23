@@ -311,11 +311,14 @@ class Enhanced3DVisualizer(CombinedVisualizer):
                                 y2 = int(y_offset + (plot_h - 20) - ((data[i] - data_min) / data_range) * (plot_h - 30))
                                 cv2.line(panel, (x1, y1), (x2, y2), color, 2, cv2.LINE_AA)
                             
-                            # Y轴标签
-                            cv2.putText(panel, f"{data_max:.3f}", (5, y_offset + 10), 
-                                       cv2.FONT_HERSHEY_SIMPLEX, 0.3, (150, 150, 150), 1, cv2.LINE_AA)
-                            cv2.putText(panel, f"{data_min:.3f}", (5, y_offset + plot_h - 25), 
-                                       cv2.FONT_HERSHEY_SIMPLEX, 0.3, (150, 150, 150), 1, cv2.LINE_AA)
+                            # Y轴标签（按颜色区分，位置错开）
+                            label_x = 5
+                            label_y_up = y_offset + 10 + axis_idx * 12
+                            label_y_down = y_offset + plot_h - 25 - axis_idx * 12
+                            cv2.putText(panel, f"{data_max:.3f}", (label_x, label_y_up), 
+                                       cv2.FONT_HERSHEY_SIMPLEX, 0.3, color, 1, cv2.LINE_AA)
+                            cv2.putText(panel, f"{data_min:.3f}", (label_x, label_y_down), 
+                                       cv2.FONT_HERSHEY_SIMPLEX, 0.3, color, 1, cv2.LINE_AA)
                     
                     # X轴标签
                     cv2.putText(panel, "0", (plot_x_start, y_offset + plot_h - 5), 
@@ -332,38 +335,45 @@ class Enhanced3DVisualizer(CombinedVisualizer):
                         legend_x += 40
             
             elif "Gripper" in plot_name:
-                for robot_idx, (robot_prefix, label, color) in enumerate(zip(robots, labels, colors)):
+                all_gripper_series = []
+                for robot_prefix in robots:
                     gripper_data = self.data[robot_prefix].get('gripper', [])
-                    
                     if gripper_data and len(gripper_data) > 0:
-                        all_grippers = np.array([gripper_data[i] for i in range(len(gripper_data))])
-                        
-                        if len(all_grippers) > 1:
-                            data_min, data_max = all_grippers.min(), all_grippers.max()
-                            data_range = data_max - data_min if data_max > data_min else 0.01
-                            
-                            # 虚线（全部）
-                            for i in range(1, len(all_grippers)):
-                                x1 = int(plot_x_start + (i - 1) / max_frames * plot_w)
-                                y1 = int(y_offset + (plot_h - 20) - ((all_grippers[i-1] - data_min) / data_range) * (plot_h - 30))
-                                x2 = int(plot_x_start + i / max_frames * plot_w)
-                                y2 = int(y_offset + (plot_h - 20) - ((all_grippers[i] - data_min) / data_range) * (plot_h - 30))
-                                dark_color = tuple(int(c * 0.3) for c in color)
-                                cv2.line(panel, (x1, y1), (x2, y2), dark_color, 1, cv2.LINE_AA)
-                            
-                            # 实线（当前）
-                            for i in range(1, min(frame_idx + 1, len(all_grippers))):
-                                x1 = int(plot_x_start + (i - 1) / max_frames * plot_w)
-                                y1 = int(y_offset + (plot_h - 20) - ((all_grippers[i-1] - data_min) / data_range) * (plot_h - 30))
-                                x2 = int(plot_x_start + i / max_frames * plot_w)
-                                y2 = int(y_offset + (plot_h - 20) - ((all_grippers[i] - data_min) / data_range) * (plot_h - 30))
-                                cv2.line(panel, (x1, y1), (x2, y2), color, 2, cv2.LINE_AA)
-                            
-                            # Y轴标签
-                            cv2.putText(panel, f"{data_max:.4f}", (5, y_offset + 10), 
-                                       cv2.FONT_HERSHEY_SIMPLEX, 0.28, (150, 150, 150), 1, cv2.LINE_AA)
-                            cv2.putText(panel, f"{data_min:.4f}", (5, y_offset + plot_h - 25), 
-                                       cv2.FONT_HERSHEY_SIMPLEX, 0.28, (150, 150, 150), 1, cv2.LINE_AA)
+                        all_gripper_series.append(np.array([gripper_data[i] for i in range(len(gripper_data))]))
+
+                if all_gripper_series:
+                    all_grippers_concat = np.concatenate(all_gripper_series)
+                    data_min, data_max = all_grippers_concat.min(), all_grippers_concat.max()
+                    data_range = data_max - data_min if data_max > data_min else 0.01
+
+                    for robot_idx, (robot_prefix, label, color) in enumerate(zip(robots, labels, colors)):
+                        gripper_data = self.data[robot_prefix].get('gripper', [])
+                        if gripper_data and len(gripper_data) > 0:
+                            all_grippers = np.array([gripper_data[i] for i in range(len(gripper_data))])
+
+                            if len(all_grippers) > 1:
+                                # 虚线（全部）
+                                for i in range(1, len(all_grippers)):
+                                    x1 = int(plot_x_start + (i - 1) / max_frames * plot_w)
+                                    y1 = int(y_offset + (plot_h - 20) - ((all_grippers[i-1] - data_min) / data_range) * (plot_h - 30))
+                                    x2 = int(plot_x_start + i / max_frames * plot_w)
+                                    y2 = int(y_offset + (plot_h - 20) - ((all_grippers[i] - data_min) / data_range) * (plot_h - 30))
+                                    dark_color = tuple(int(c * 0.3) for c in color)
+                                    cv2.line(panel, (x1, y1), (x2, y2), dark_color, 1, cv2.LINE_AA)
+
+                                # 实线（当前）
+                                for i in range(1, min(frame_idx + 1, len(all_grippers))):
+                                    x1 = int(plot_x_start + (i - 1) / max_frames * plot_w)
+                                    y1 = int(y_offset + (plot_h - 20) - ((all_grippers[i-1] - data_min) / data_range) * (plot_h - 30))
+                                    x2 = int(plot_x_start + i / max_frames * plot_w)
+                                    y2 = int(y_offset + (plot_h - 20) - ((all_grippers[i] - data_min) / data_range) * (plot_h - 30))
+                                    cv2.line(panel, (x1, y1), (x2, y2), color, 2, cv2.LINE_AA)
+
+                    # Y轴标签（统一范围）
+                    cv2.putText(panel, f"{data_max:.3f}", (5, y_offset + 10), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.28, (150, 150, 150), 1, cv2.LINE_AA)
+                    cv2.putText(panel, f"{data_min:.3f}", (5, y_offset + plot_h - 25), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.28, (150, 150, 150), 1, cv2.LINE_AA)
                 
                 # X轴标签
                 cv2.putText(panel, "0", (plot_x_start, y_offset + plot_h - 5), 
