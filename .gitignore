@@ -1,28 +1,31 @@
 # Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*$py.class
+*.so
 .Python
 venv/
+env/
 *.egg-info/
+dist/
+build/
 
-# Data files
-data/
-output/
+# 数据文件
 *.zarr
 *.zarr.zip
 *.mp4
 *.avi
+*.png
+*.jpg
 
 # IDE
 .vscode/
 .idea/
 *.swp
+*.swo
 
 # Mac
 .DS_Store
 
-# Temporary files
+# 其他
 *.log
-.pytest_cache/
