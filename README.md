@@ -14,10 +14,10 @@ pip install -r requirements.txt
 ## 使用
 ```bash
 # 交互模式
-python src/viz_3d_enhanced.py data/your_data.zarr.zip --record False
+python src/viz_3d_enhanced.py data/your_data.zarr.zip
 
 # 录制视频
-python src/viz_3d_enhanced.py data/your_data.zarr.zip --record True --record_episode 1 --output_video demo.mp4
+python src/viz_3d_enhanced.py data/your_data.zarr.zip -r --record_episode 1 --output_video demo.mp4
 ```
 
 ## 控制

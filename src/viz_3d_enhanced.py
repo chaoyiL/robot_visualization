@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import time
 from viz_vb_data import (CombinedVisualizer, ROBOT_IDS, resize_with_label, 
                          hstack_with_sep, create_combined_image)
 import trimesh
@@ -14,7 +15,89 @@ class Enhanced3DVisualizer(CombinedVisualizer):
         self.window_name = "Robot Monitor"
         self.playback_speed = 1.0
         self.auto_next_episode = True  # 自动播放下一个Episode
+        self._world_scene = None
+        self._world_dynamic_nodes = []
+        self._world_camera_pose = None
+        self._cached_axis_mesh = None
+        self._cached_wrist_mesh = None
+        self._cached_base_mesh = None
+        self._cached_sensor_meshes = None
+        self._cached_controller_meshes = None
+        self._cached_gripper_mesh_left = None
+        self._cached_gripper_mesh_right = None
         super().__init__(*args, **kwargs)
+
+    def setup_renderers(self):
+        super().setup_renderers()
+        self._init_world_scene_cache()
+
+    def _init_world_scene_cache(self):
+        """初始化并缓存世界场景、相机和静态网格"""
+        from viz_vb_data import (_axis_mesh, _lookat_camera_pose)
+
+        scene = pyrender.Scene(bg_color=[0.05, 0.08, 0.12, 1.0])
+
+        floor_grid = self._create_floor_grid_solid(size=1.5, step=0.2)
+        if floor_grid:
+            scene.add(floor_grid)
+
+        coord_axes = self._create_coordinate_axes(length=0.2)
+        for axis_mesh in coord_axes:
+            scene.add(axis_mesh)
+
+        self._cached_axis_mesh = _axis_mesh(size=0.05)
+
+        wrist = trimesh.creation.cylinder(radius=0.02, height=0.03, sections=16)
+        wrist.visual.vertex_colors = np.array([180, 180, 180, 255], dtype=np.uint8)
+        self._cached_wrist_mesh = pyrender.Mesh.from_trimesh(wrist, smooth=True)
+
+        base = trimesh.creation.box(extents=[0.08, 0.04, 0.02])
+        base.visual.vertex_colors = np.array([200, 200, 200, 255], dtype=np.uint8)
+        self._cached_base_mesh = pyrender.Mesh.from_trimesh(base, smooth=False)
+
+        self._cached_sensor_meshes = {
+            'left': self._create_sensor_mesh([0, 255, 0]),
+            'right': self._create_sensor_mesh([255, 0, 0])
+        }
+
+        self._cached_controller_meshes = {
+            'left': self._create_realistic_quest_controller(is_left=True),
+            'right': self._create_realistic_quest_controller(is_left=False)
+        }
+
+        gripper_base_mesh = self._load_real_gripper_stl()
+        if gripper_base_mesh is not None:
+            left_gripper = gripper_base_mesh.copy()
+            left_gripper.visual.vertex_colors = np.array([180, 180, 180, 255], dtype=np.uint8)
+            self._cached_gripper_mesh_left = pyrender.Mesh.from_trimesh(left_gripper, smooth=True)
+
+            right_gripper = gripper_base_mesh.copy()
+            mirror = np.eye(4)
+            mirror[1, 1] = -1
+            right_gripper.apply_transform(mirror)
+            right_gripper.visual.vertex_colors = np.array([180, 180, 180, 255], dtype=np.uint8)
+            self._cached_gripper_mesh_right = pyrender.Mesh.from_trimesh(right_gripper, smooth=True)
+
+        cam_pose = _lookat_camera_pose([0.05, -0.3, 0.4], [0, 0, 0], [0, 0, 1])
+        self._world_camera_pose = cam_pose
+        camera = pyrender.PerspectiveCamera(yfov=np.deg2rad(60.0))
+        scene.add(camera, pose=cam_pose)
+
+        main_light = pyrender.DirectionalLight(color=np.ones(3), intensity=5.0)
+        scene.add(main_light, pose=cam_pose)
+
+        fill_pose = cam_pose.copy()
+        fill_pose[:3, 3] = -cam_pose[:3, 3]
+        fill_light = pyrender.DirectionalLight(color=[0.8, 0.9, 1.0], intensity=2.0)
+        scene.add(fill_light, pose=fill_pose)
+
+        self._world_scene = scene
+        self._world_dynamic_nodes = []
+
+    def _create_sensor_mesh(self, color_rgb):
+        sensor = trimesh.creation.cylinder(radius=0.012, height=0.003, sections=16)
+        sensor.visual.vertex_colors = np.array(color_rgb + [255], dtype=np.uint8)
+        return pyrender.Mesh.from_trimesh(sensor, smooth=True)
     
     def _create_realistic_quest_controller(self, is_left=True):
         """创建Quest手柄"""
@@ -61,7 +144,7 @@ class Enhanced3DVisualizer(CombinedVisualizer):
             line.visual.vertex_colors = np.array([100, 120, 140, 255], dtype=np.uint8)
             rot_tf = trimesh.transformations.rotation_matrix(np.pi/2, [0, 1, 0])
             line.apply_transform(rot_tf)
-            line.apply_translation([0, y, 0.001])
+            line.apply_translation([0, y, -0.5])
             meshes.append(line)
         
         for x in np.arange(-size, size + step, step):
@@ -69,7 +152,7 @@ class Enhanced3DVisualizer(CombinedVisualizer):
             line.visual.vertex_colors = np.array([100, 120, 140, 255], dtype=np.uint8)
             rot_tf = trimesh.transformations.rotation_matrix(np.pi/2, [1, 0, 0])
             line.apply_transform(rot_tf)
-            line.apply_translation([x, 0, 0.001])
+            line.apply_translation([x, 0, -0.5])
             meshes.append(line)
         
         if meshes:
@@ -127,23 +210,18 @@ class Enhanced3DVisualizer(CombinedVisualizer):
     
     def render_world_scene(self, current_idx):
         """渲染世界场景"""
-        from viz_vb_data import (pyrender, trimesh, _axis_mesh, _line_mesh, 
-                                 _pointcloud_mesh, _lookat_camera_pose, RenderFlags)
-        
-        scene = pyrender.Scene(bg_color=[0.05, 0.08, 0.12, 1.0])
-        
-        floor_grid = self._create_floor_grid_solid(size=1.5, step=0.2)
-        if floor_grid:
-            scene.add(floor_grid)
-        
-        coord_axes = self._create_coordinate_axes(length=0.2)
-        for axis_mesh in coord_axes:
-            scene.add(axis_mesh)
+        from viz_vb_data import (_line_mesh, _pointcloud_mesh, RenderFlags)
+
+        if self._world_scene is None:
+            self._init_world_scene_cache()
+
+        scene = self._world_scene
+
+        for node in self._world_dynamic_nodes:
+            scene.remove_node(node)
+        self._world_dynamic_nodes = []
 
         colors = {0: [1, 0, 0], 1: [0, 1, 0]}
-        all_pts = []
-        gripper_base_mesh = self._load_real_gripper_stl()
-
         for r in ROBOT_IDS:
             prefix = f'robot{r}'
             poses = self.data[prefix].get('poses', [])
@@ -151,15 +229,14 @@ class Enhanced3DVisualizer(CombinedVisualizer):
                 continue
 
             pts = np.array([p[:3, 3] for p in poses[:current_idx + 1]], dtype=np.float64)
-            all_pts.append(pts)
 
             line_mesh = _line_mesh(pts, color=colors[r], radius=0.012)
             if line_mesh:
-                scene.add(line_mesh)
+                self._world_dynamic_nodes.append(scene.add(line_mesh))
 
             pts_mesh = _pointcloud_mesh(pts, color=colors[r])
             if pts_mesh:
-                scene.add(pts_mesh)
+                self._world_dynamic_nodes.append(scene.add(pts_mesh))
 
             frame_pose = poses[current_idx]
             combined_rotation = Rotation.from_euler('xz', [180, 90], degrees=True).as_matrix()
@@ -167,82 +244,48 @@ class Enhanced3DVisualizer(CombinedVisualizer):
             flip_tf[:3, :3] = combined_rotation
             flipped_pose = frame_pose @ flip_tf
             
-            scene.add(_axis_mesh(size=0.05), pose=flipped_pose)
+            if self._cached_axis_mesh is not None:
+                self._world_dynamic_nodes.append(scene.add(self._cached_axis_mesh, pose=flipped_pose))
             
-            ctrl = self._create_realistic_quest_controller(is_left=(r==1))
+            ctrl = self._cached_controller_meshes['left'] if r == 1 else self._cached_controller_meshes['right']
             if ctrl:
                 ctrl_tf = np.eye(4)
                 rot = Rotation.from_euler('y', 90, degrees=True).as_matrix()
                 ctrl_tf[:3, :3] = rot
                 ctrl_tf[:3, 3] = [0, 0, 0.05]
-                scene.add(ctrl, pose=flipped_pose @ ctrl_tf)
+                self._world_dynamic_nodes.append(scene.add(ctrl, pose=flipped_pose @ ctrl_tf))
             
-            wrist = trimesh.creation.cylinder(radius=0.02, height=0.03, sections=16)
-            wrist.visual.vertex_colors = np.array([180, 180, 180, 255], dtype=np.uint8)
-            wrist_mesh = pyrender.Mesh.from_trimesh(wrist, smooth=True)
             wrist_tf = np.eye(4)
             wrist_tf[:3, 3] = [0, 0, 0.01]
-            scene.add(wrist_mesh, pose=flipped_pose @ wrist_tf)
+            if self._cached_wrist_mesh is not None:
+                self._world_dynamic_nodes.append(scene.add(self._cached_wrist_mesh, pose=flipped_pose @ wrist_tf))
             
-            base = trimesh.creation.box(extents=[0.08, 0.04, 0.02])
-            base.visual.vertex_colors = np.array([200, 200, 200, 255], dtype=np.uint8)
-            base_mesh = pyrender.Mesh.from_trimesh(base, smooth=False)
             base_tf = np.eye(4)
             base_tf[:3, 3] = [0, 0, -0.02]
-            scene.add(base_mesh, pose=flipped_pose @ base_tf)
+            if self._cached_base_mesh is not None:
+                self._world_dynamic_nodes.append(scene.add(self._cached_base_mesh, pose=flipped_pose @ base_tf))
             
             gripper = self.data[prefix].get('gripper', [])
             if gripper and current_idx < len(gripper):
                 grip_width = float(gripper[current_idx])
                 offset = max(grip_width * 0.5, 0.03)
                 
-                if gripper_base_mesh is not None:
-                    left_gripper = gripper_base_mesh.copy()
-                    left_gripper.visual.vertex_colors = np.array([180, 180, 180, 255], dtype=np.uint8)
-                    left_gripper_mesh = pyrender.Mesh.from_trimesh(left_gripper, smooth=True)
+                if self._cached_gripper_mesh_left is not None and self._cached_gripper_mesh_right is not None:
                     left_tf = np.eye(4)
                     left_tf[:3, 3] = [0.02, -offset, -0.04]
-                    scene.add(left_gripper_mesh, pose=flipped_pose @ left_tf)
+                    self._world_dynamic_nodes.append(scene.add(self._cached_gripper_mesh_left, pose=flipped_pose @ left_tf))
                     
-                    right_gripper = gripper_base_mesh.copy()
-                    mirror = np.eye(4)
-                    mirror[1, 1] = -1
-                    right_gripper.apply_transform(mirror)
-                    right_gripper.visual.vertex_colors = np.array([180, 180, 180, 255], dtype=np.uint8)
-                    right_gripper_mesh = pyrender.Mesh.from_trimesh(right_gripper, smooth=True)
                     right_tf = np.eye(4)
                     right_tf[:3, 3] = [0.02, offset, -0.04]
-                    scene.add(right_gripper_mesh, pose=flipped_pose @ right_tf)
+                    self._world_dynamic_nodes.append(scene.add(self._cached_gripper_mesh_right, pose=flipped_pose @ right_tf))
                 
                 for side, sign, color_rgb in [('left', -1, [0, 255, 0]), ('right', 1, [255, 0, 0])]:
-                    sensor = trimesh.creation.cylinder(radius=0.012, height=0.003, sections=16)
-                    sensor.visual.vertex_colors = np.array(color_rgb + [255], dtype=np.uint8)
-                    sensor_mesh = pyrender.Mesh.from_trimesh(sensor, smooth=True)
+                    sensor_mesh = self._cached_sensor_meshes[side] if self._cached_sensor_meshes else None
                     sensor_tf = np.eye(4)
                     sensor_tf[:3, :3] = Rotation.from_euler('x', 90, degrees=True).as_matrix()
                     sensor_tf[:3, 3] = [0.05, sign * (offset - 0.01), -0.04]
-                    scene.add(sensor_mesh, pose=flipped_pose @ sensor_tf)
-
-        if not all_pts:
-            cam_pose = _lookat_camera_pose([0.5, -0.3, 0.8], [0, 0, 0.3], [0, 0, 1])
-        else:
-            pts = np.vstack(all_pts)
-            center = pts.mean(axis=0)
-            extent = pts.max(axis=0) - pts.min(axis=0)
-            dist = max(np.max(extent) * 2.0, 0.3)
-            eye = center + np.array([dist * 0.6, -dist * 0.4, dist * 0.8])
-            cam_pose = _lookat_camera_pose(eye, center, [0, 0, 1])
-
-        camera = pyrender.PerspectiveCamera(yfov=np.deg2rad(60.0))
-        scene.add(camera, pose=cam_pose)
-        
-        main_light = pyrender.DirectionalLight(color=np.ones(3), intensity=5.0)
-        scene.add(main_light, pose=cam_pose)
-        
-        fill_pose = cam_pose.copy()
-        fill_pose[:3, 3] = -cam_pose[:3, 3]
-        fill_light = pyrender.DirectionalLight(color=[0.8, 0.9, 1.0], intensity=2.0)
-        scene.add(fill_light, pose=fill_pose)
+                    if sensor_mesh is not None:
+                        self._world_dynamic_nodes.append(scene.add(sensor_mesh, pose=flipped_pose @ sensor_tf))
 
         color_img, _ = self.renderers['world'].render(scene, flags=RenderFlags.RGBA)
         return color_img[:, :, :3]
@@ -265,8 +308,8 @@ class Enhanced3DVisualizer(CombinedVisualizer):
         max_frames = len(self.data['robot0']['poses'])
         
         plots = [
-            ("Robot 0 Position (m)", ['robot0'], ['X', 'Y', 'Z'], [(255, 100, 100), (100, 255, 100), (100, 100, 255)]),
-            ("Robot 1 Position (m)", ['robot1'], ['X', 'Y', 'Z'], [(255, 100, 100), (100, 255, 100), (100, 100, 255)]),
+            ("Robot 0 Position (m)", ['robot0'], ['X', 'Y', 'Z'], [(255, 10, 10), (10, 255, 10), (10, 10, 255)]),
+            ("Robot 1 Position (m)", ['robot1'], ['X', 'Y', 'Z'], [(255, 10, 10), (10, 255, 10), (10, 10, 255)]),
             ("Gripper Width (m)", ['robot0', 'robot1'], ['R0', 'R1'], [(255, 100, 100), (100, 255, 100)])
         ]
         
@@ -397,9 +440,6 @@ class Enhanced3DVisualizer(CombinedVisualizer):
         """渲染完整帧"""
         self.frame_idx = frame_idx
         world_image = self.render_world_scene(frame_idx)
-        if world_image is not None:
-            world_image = self._enhance_3d_image(world_image)
-            world_image = cv2.resize(world_image, (int(700 * world_image.shape[1] / world_image.shape[0]), 700))
         return self._create_complete_layout(frame_idx, {}, world_image)
     
     def _enhance_3d_image(self, img):
@@ -652,6 +692,13 @@ class Enhanced3DVisualizer(CombinedVisualizer):
         
         cv2.destroyAllWindows()
 
+    def record_episode(self):
+        """录制当前episode（计时）"""
+        start_time = time.perf_counter()
+        super().record_episode()
+        elapsed = time.perf_counter() - start_time
+        print(f" 录制耗时 {elapsed:.2f}s")
+
 def main():
     import argparse
     from zarr.storage import ZipStore
@@ -660,11 +707,11 @@ def main():
     
     parser = argparse.ArgumentParser()
     parser.add_argument('zarr_path', nargs='?', default='data/_0115_bi_pick_and_place_2ver.zarr.zip')
-    parser.add_argument('--record', type=lambda x: x.lower() == 'true', default=False)
-    parser.add_argument('--record_episode', type=int, default=1)
-    parser.add_argument('--output_video', type=str, default=None)
+    parser.add_argument('--record', '-r', action='store_true')
+    parser.add_argument('--record_episode', '-e', type=int, default=1)
+    parser.add_argument('--output_video', '-o', type=str, default=None)
     parser.add_argument('--fps', type=int, default=30)
-    parser.add_argument('--continue_after_record', type=lambda x: x.lower() == 'true', default=True)
+    parser.add_argument('--continue_after_record', "-c", action='store_true')
     args = parser.parse_args()
     
     if not os.path.exists(args.zarr_path): 
