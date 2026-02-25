@@ -59,9 +59,15 @@ def mat_to_pose(mat):
     return pos_rot_to_pose(*mat_to_pos_rot(mat))
 
 def rot6d_to_mat(a1, a2):
-    b1 = a1 / np.linalg.norm(a1, axis=-1, keepdims=True)
+    n1 = np.linalg.norm(a1, axis=-1, keepdims=True)
+    if np.any(n1 < 1e-8):
+        return np.eye(3, dtype=np.float32)
+    b1 = a1 / n1
     b2 = a2 - np.sum(b1 * a2, axis=-1, keepdims=True) * b1
-    b2 = b2 / np.linalg.norm(b2, axis=-1, keepdims=True)
+    n2 = np.linalg.norm(b2, axis=-1, keepdims=True)
+    if np.any(n2 < 1e-8):
+        return np.eye(3, dtype=np.float32)
+    b2 = b2 / n2
     b3 = np.cross(b1, b2, axis=-1)
     out = np.stack((b1, b2, b3), axis=-1)
     return out
@@ -74,7 +80,8 @@ def action9_to_mat(action9: np.ndarray):
     c2 = action9[6:9].astype(np.float32)
 
     mat = np.eye(4, dtype=np.float32)
-    mat[:3, :3] = rot6d_to_mat(c1, c2)
+    if np.linalg.norm(c1) > 1e-8 and np.linalg.norm(c2) > 1e-8:
+        mat[:3, :3] = rot6d_to_mat(c1, c2)
     mat[:3, 3] = t
     return mat
 
