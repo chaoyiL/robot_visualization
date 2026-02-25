@@ -17,6 +17,7 @@ build/
 *.avi
 *.png
 *.jpg
+*data/
 
 # IDE
 .vscode/
