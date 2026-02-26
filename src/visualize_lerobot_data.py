@@ -5,8 +5,39 @@ LeRobot数据可视化适配器（修复版）
 直接使用 HuggingFace datasets 加载，绕过 LeRobotDataset 的 bug
 
 使用方法:
-python src/visualize_lerobot_data.py --repo_id /home/rvsa/codehub/robot_visualization/data/datasets--liuchaoyi--lerobot_data_0118/snapshots/13c4d0afed2466af0eec729bad1e8ccaa9083ca7 --pose_mode action
-python src/visualize_lerobot_data.py --repo_id /home/rvsa/codehub/robot_visualization/data/example --pose_mode action
+
+--pose_mode: 位姿来源模式: state(观测量) 或 action(动作增量重建)
+--test_action_x: 测试模式: 在action模式下注入沿x方向平移轨迹
+--test_action_dx: 测试轨迹单步平移量(米/帧), 仅 --test_action_x 生效
+--hide_gripper: 隐藏gripper模型显示
+
+python src/visualize_lerobot_data.py \
+  --repo_id /home/rvsa/codehub/robot_visualization/data/datasets--liuchaoyi--lerobot_data_0118/snapshots/13c4d0afed2466af0eec729bad1e8ccaa9083ca7 \
+  --test_action_x \
+  --test_action_dx 0.005 \
+  --hide_gripper
+
+python src/visualize_lerobot_data.py \
+  --repo_id /home/rvsa/codehub/robot_visualization/data/datasets--liuchaoyi--lerobot_data_0118/snapshots/13c4d0afed2466af0eec729bad1e8ccaa9083ca7 \
+  --pose_mode state \
+  --hide_gripper
+
+# Error
+python src/visualize_lerobot_data.py \
+  --repo_id /home/rvsa/codehub/robot_visualization/data/example \
+  --pose_mode action \
+  --hide_gripper
+
+# Correct
+python src/visualize_lerobot_data.py \
+  --repo_id /home/rvsa/codehub/robot_visualization/data/example_new \
+  --pose_mode action \
+  --hide_gripper
+
+python src/visualize_lerobot_data.py \
+  --repo_id /home/rvsa/codehub/robot_visualization/data/example_new \
+  --pose_mode state \
+  --hide_gripper
 """
 
 import sys
@@ -75,7 +106,7 @@ def rot6d_to_mat(a1, a2):
 def action9_to_mat(action9: np.ndarray):
     if action9.shape[0] != 9:
         raise ValueError(f"action length must be 9, got {action9.shape[0]}")
-    t = action9[:3].astype(np.float32)
+    t = action9[:3].astype(np.float32).reshape(1,3)
     c1 = action9[3:6].astype(np.float32)
     c2 = action9[6:9].astype(np.float32)
 
@@ -105,13 +136,21 @@ class _LazyColumn:
 class LeRobotReplayBufferAdapter:
     """LeRobot到ReplayBuffer的适配器（修复版）"""
     
-    def __init__(self, repo_id: str, pose_mode: str = 'state'):
+    def __init__(
+        self,
+        repo_id: str,
+        pose_mode: str = 'state',
+        test_action_x: bool = False,
+        test_action_dx: float = 0.005,
+    ):
         print(f"\n{'='*70}")
         print(f"加载LeRobot数据集: {repo_id}")
         print(f"{'='*70}\n")
         if pose_mode not in ('state', 'action'):
             raise ValueError("pose_mode must be 'state' or 'action'")
         self.pose_mode = pose_mode
+        self.test_action_x = test_action_x
+        self.test_action_dx = float(test_action_dx)
         
         # 处理本地路径
         repo_id = self._resolve_path(repo_id)
@@ -212,6 +251,8 @@ class LeRobotReplayBufferAdapter:
 
         print("\n✓ 使用懒加载模式（按需读取帧数据）")
         print(f"✓ 位姿来源模式: {self.pose_mode}")
+        if self.test_action_x:
+            print(f"✓ 测试轨迹: robot0 & 1 沿 x 方向平移, dx={self.test_action_dx:.6f} m/frame")
 
     def _get_episode_bounds_by_idx(self, idx: int):
         if idx < 0:
@@ -255,7 +296,24 @@ class LeRobotReplayBufferAdapter:
 
         for local_i in range(1, ep_len):
             abs_i = ep_start + local_i
-            action = np.asarray(self.dataset[abs_i]['actions'], dtype=np.float32)
+            if self.test_action_x:
+                action = np.zeros((20,), dtype=np.float32)
+
+                # 平移测试
+                action[0] = self.test_action_dx
+
+                # 旋转测试
+                # action定义为“当前帧 -> 上一帧”，此处构造绕x轴旋转测试轨迹
+                theta = self.test_action_dx
+                c = float(np.cos(theta))
+                s = float(np.sin(theta))
+                # rot6d: 前两列分别是 [1,0,0] 和 [0,c,s]
+                action[3:6] = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+                action[6:9] = np.array([0.0, c, s], dtype=np.float32)
+                action[13:16] = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+                action[16:19] = np.array([0.0, c, s], dtype=np.float32)
+            else:
+                action = np.asarray(self.dataset[abs_i]['actions'], dtype=np.float32)
 
             # 数据定义：当前帧 -> 上一帧
             robot0_cur_to_prev = action9_to_mat(action[0:9].copy())
@@ -397,11 +455,26 @@ def main():
                        help='录制后继续')
     parser.add_argument('--pose_mode', type=str, default='state', choices=['state', 'action'],
                        help='位姿来源模式: state(原始状态) 或 action(动作增量重建)')
+    parser.add_argument('--hide_gripper', action='store_true',
+                       help='隐藏3D世界视图中的gripper模型显示')
+    parser.add_argument('--test_action_x', action='store_true',
+                       help='测试模式: 在action模式下注入沿x方向平移轨迹')
+    parser.add_argument('--test_action_dx', type=float, default=0.005,
+                       help='测试轨迹单步平移量(米/帧), 仅 --test_action_x 生效')
     
     args = parser.parse_args()
     
     try:
-        adapter = LeRobotReplayBufferAdapter(args.repo_id, pose_mode=args.pose_mode)
+        if args.test_action_x and args.pose_mode != 'action':
+            print("检测到 --test_action_x，自动切换到 --pose_mode action")
+            args.pose_mode = 'action'
+
+        adapter = LeRobotReplayBufferAdapter(
+            args.repo_id,
+            pose_mode=args.pose_mode,
+            test_action_x=args.test_action_x,
+            test_action_dx=args.test_action_dx,
+        )
         
         if args.record and args.output_video is None:
             import datetime
@@ -422,7 +495,8 @@ def main():
             record_episode=args.record_episode,
             output_video=args.output_video,
             record_fps=args.fps,
-            continue_after_record=args.continue_after_record
+            continue_after_record=args.continue_after_record,
+            show_gripper=not args.hide_gripper,
         )
         
         print("\n✓ 完成")

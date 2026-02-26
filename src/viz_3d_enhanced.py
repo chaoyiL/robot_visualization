@@ -12,6 +12,7 @@ class Enhanced3DVisualizer(CombinedVisualizer):
     """3D增强可视化器"""
     
     def __init__(self, *args, **kwargs):
+        self.show_gripper = kwargs.pop('show_gripper', True)
         self.window_name = "Robot Monitor"
         self.playback_speed = 1.0
         self.auto_next_episode = True  # 自动播放下一个Episode
@@ -239,7 +240,9 @@ class Enhanced3DVisualizer(CombinedVisualizer):
                 self._world_dynamic_nodes.append(scene.add(pts_mesh))
 
             frame_pose = poses[current_idx]
-            combined_rotation = Rotation.from_euler('xz', [180, 90], degrees=True).as_matrix()
+            # HACK: 何意味？
+            # combined_rotation = Rotation.from_euler('xz', [180, 90], degrees=True).as_matrix()
+            combined_rotation = np.eye(3)
             flip_tf = np.eye(4)
             flip_tf[:3, :3] = combined_rotation
             flipped_pose = frame_pose @ flip_tf
@@ -266,7 +269,7 @@ class Enhanced3DVisualizer(CombinedVisualizer):
                 self._world_dynamic_nodes.append(scene.add(self._cached_base_mesh, pose=flipped_pose @ base_tf))
             
             gripper = self.data[prefix].get('gripper', [])
-            if gripper and current_idx < len(gripper):
+            if self.show_gripper and gripper and current_idx < len(gripper):
                 grip_width = float(gripper[current_idx])
                 offset = max(grip_width * 0.5, 0.03)
                 
