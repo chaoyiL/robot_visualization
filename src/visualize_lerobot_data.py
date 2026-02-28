@@ -18,8 +18,8 @@ python src/visualize_lerobot_data.py \
   --hide_gripper
 
 python src/visualize_lerobot_data.py \
-  --repo_id /home/rvsa/codehub/robot_visualization/data/datasets--liuchaoyi--lerobot_data_0118/snapshots/13c4d0afed2466af0eec729bad1e8ccaa9083ca7 \
-  --pose_mode state \
+  --repo_id /home/rvsa/codehub/robot_visualization/data/_0118 \
+  --pose_mode action \
   --hide_gripper
 
 # Error
@@ -35,8 +35,13 @@ python src/visualize_lerobot_data.py \
   --hide_gripper
 
 python src/visualize_lerobot_data.py \
-  --repo_id /home/rvsa/codehub/robot_visualization/data/example_new \
-  --pose_mode state \
+  --repo_id /home/rvsa/codehub/robot_visualization/data/_0118_bi_pick_and_place \
+  --pose_mode action \
+  --hide_gripper
+
+python src/visualize_lerobot_data.py \
+  --repo_id /home/rvsa/codehub/robot_visualization/data/_0118_data \
+  --pose_mode action \
   --hide_gripper
 """
 
@@ -293,6 +298,9 @@ class LeRobotReplayBufferAdapter:
         first_action = np.asarray(self.dataset[ep_start]['actions'], dtype=np.float32)
         robot0_gripper[0] = first_action[9]
         robot1_gripper[0] = first_action[19]
+        # print(
+        #     f"[action模式] step=0 abs_idx={ep_start} 左手action={first_action[0:10].copy()}"
+        # )
 
         for local_i in range(1, ep_len):
             abs_i = ep_start + local_i
@@ -314,6 +322,9 @@ class LeRobotReplayBufferAdapter:
                 action[16:19] = np.array([0.0, c, s], dtype=np.float32)
             else:
                 action = np.asarray(self.dataset[abs_i]['actions'], dtype=np.float32)
+            print(
+                f"[action模式] step={local_i} abs_idx={abs_i} 左手action={action[0:10].copy()}"
+            )
 
             # 数据定义：当前帧 -> 上一帧
             robot0_cur_to_prev = action9_to_mat(action[0:9].copy())
@@ -441,8 +452,8 @@ def main():
     
     parser.add_argument('--repo_id', type=str, required=True, 
                        help='数据集路径或repo_id')
-    parser.add_argument('--episode', type=int, default=0, 
-                       help='起始episode')
+    parser.add_argument('--episode', type=int, default=200, 
+                       help='起始数据编号(episode index)')
     parser.add_argument('--record', '-r', action='store_true', 
                        help='录制视频')
     parser.add_argument('--record_episode', '-e', type=int, default=0, 
@@ -486,7 +497,14 @@ def main():
         print("启动可视化器...")
         print(f"{'='*70}\n")
         
-        episodes = np.arange(adapter.n_episodes)
+        if args.episode < 0:
+            raise ValueError(f"--episode 必须 >= 0，当前为 {args.episode}")
+        if args.episode >= adapter.n_episodes:
+            raise ValueError(
+                f"--episode={args.episode} 超出范围，数据集共有 {adapter.n_episodes} 个 episode"
+            )
+
+        episodes = np.arange(args.episode, adapter.n_episodes)
         
         visualizer = Enhanced3DVisualizer(
             replay_buffer=adapter,
