@@ -40,8 +40,8 @@ python src/visualize_lerobot_data.py \
   --hide_gripper
 
 python src/visualize_lerobot_data.py \
-  --repo_id /home/rvsa/codehub/robot_visualization/data/_0118_data \
-  --pose_mode action \
+  --repo_id /home/rvsa/codehub/robot_visualization/data/raw_0118_data \
+  --pose_mode state \
   --hide_gripper
 """
 
@@ -290,7 +290,7 @@ class LeRobotReplayBufferAdapter:
 
         first_state = np.asarray(self.dataset[ep_start]['observation.state'], dtype=np.float32)
         rel_0to1_mat = pose_to_mat(first_state[14:20].copy())
-        robot0_pose0 = pose_to_mat(first_state[0:6].copy())
+        robot0_pose0 = np.eye(4, dtype=np.float32)
         robot1_pose0 = robot0_pose0 @ np.linalg.inv(rel_0to1_mat)
         robot0_poses[0] = robot0_pose0.astype(np.float32)
         robot1_poses[0] = robot1_pose0.astype(np.float32)
@@ -383,6 +383,9 @@ class LeRobotReplayBufferAdapter:
                 if key == 'robot1_gripper_width':
                     return np.array([cache['robot1_gripper'][local_i]], dtype=np.float32)
             else:
+                state = np.asarray(item['observation.state'], dtype=np.float32)
+                print(f"state : {state}")  # 加在第387行之前
+
                 state = np.asarray(item['observation.state'], dtype=np.float32)
                 rel_pose = state[14:20].copy()
                 rel_0to1_mat = pose_to_mat(rel_pose)
