@@ -9,10 +9,11 @@ Features:
   - Timeseries plots for EEF position and gripper width
   - Interactive timeline scrubbing, all episodes in one recording
 
-Usage:
-    python src/viz_rerun.py data/your_data.zarr.zip
-    python src/viz_rerun.py data/your_data.zarr.zip --episode 0
-    python src/viz_rerun.py data/your_data.zarr.zip --save output.rrd
+Usage (run from any directory):
+    python /path/to/src/viz_rerun.py /path/to/lerobot_dataset
+    python /path/to/src/viz_rerun.py /path/to/data.zarr.zip
+    python /path/to/src/viz_rerun.py /path/to/dataset --episode 0
+    python /path/to/src/viz_rerun.py /path/to/dataset --save output.rrd
 """
 
 import sys
@@ -386,17 +387,25 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Visualize robot teleoperation data with Rerun"
+        description="Visualize robot teleoperation data with Rerun.\n"
+                    "Accepts a LeRobot dataset directory OR a .zarr.zip file.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  python src/viz_rerun.py /path/to/lerobot_dataset\n"
+            "  python src/viz_rerun.py /path/to/data.zarr.zip\n"
+            "  python src/viz_rerun.py /path/to/dataset --episode 3\n"
+            "  python src/viz_rerun.py /path/to/dataset --save out.rrd\n"
+        ),
     )
     parser.add_argument(
-        "zarr_path",
-        nargs="?",
-        default="data/_0115_bi_pick_and_place_2ver.zarr.zip",
-        help="Path to .zarr.zip dataset",
+        "dataset",
+        help="LeRobot dataset directory (contains meta/info.json) "
+             "or path to a .zarr.zip file",
     )
     parser.add_argument(
         "--episode", "-e", type=int, default=None,
-        help="Single episode index (default: all episodes)",
+        help="Single episode index to visualize (default: all episodes)",
     )
     parser.add_argument(
         "--save", "-s", type=str, default=None,
@@ -404,7 +413,8 @@ def main():
     )
     args = parser.parse_args()
 
-    dataset_path = args.zarr_path  # reuse same positional arg for any path
+    # resolve to absolute path so the script works from any CWD
+    dataset_path = os.path.abspath(args.dataset)
 
     if not os.path.exists(dataset_path):
         print(f"Error: path not found: {dataset_path}")
