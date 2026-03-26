@@ -1,37 +1,83 @@
 # Robot Visualization
 
-VR双臂机器人遥操作数据可视化工具
+VR双臂机器人遥操作数据可视化工具，基于 [Rerun](https://rerun.io) 构建。
+
+支持 LeRobot v2.1 数据集格式，提供：
+- 交互式 3D 世界视图（EEF 位姿、轨迹、夹爪 / 控制器网格）
+- 相机 & 触觉传感器图像面板
+- EEF 位置 & 夹爪宽度时间序列曲线
+- 时间轴自由拖动，支持跨 episode 浏览
 
 ## 安装
+
 ```bash
-git clone https://github.com/Jerryzhang258/robot_visualization.git
+git clone https://github.com/chaoyiL/robot_visualization.git
 cd robot_visualization
-python3 -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-## 使用
-```bash
-# 交互模式
-python src/viz_3d_enhanced.py data/your_data.zarr.zip
+主要依赖：`rerun-sdk >= 0.16`、`pyarrow`、`trimesh`、`scipy`、`opencv-python`
 
-# 录制视频
-python src/viz_3d_enhanced.py data/your_data.zarr.zip -r --record_episode 1 --output_video demo.mp4
+## 使用
+
+```bash
+python src/viz_rerun.py /path/to/lerobot_dataset
 ```
 
-## 控制
+运行后 Rerun viewer 会自动打开，数据实时流入。
 
-- `A/D` - 前后帧
-- `W/S` - 切换Episode  
-- `P` - 自动播放
-- `1-5` - 调速 (0.25x, 0.5x, 1x, 2x, 5x)
-- `Q` - 退出
+### 常用选项
+
+| 选项 | 说明 |
+|------|------|
+| `--episode 3` / `-e 3` | 只加载第 3 个 episode（默认加载全部） |
+| `--save out.rrd` / `-s out.rrd` | 保存为 `.rrd` 文件，不打开 viewer |
+
+```bash
+# 只看第 0 个 episode
+python src/viz_rerun.py /path/to/dataset --episode 0
+
+# 保存录制文件，之后用 rerun 打开
+python src/viz_rerun.py /path/to/dataset --save output.rrd
+rerun output.rrd
+```
 
 ## 数据格式
 
-Zarr格式 (.zarr.zip)，包含：
-- robot0/1_eef_pos (位置)
-- robot0/1_gripper_width (夹爪)
-- robot0/1_visual (相机)
-- robot0/1_left/right_tactile (触觉)
+LeRobot v2.1 目录结构：
+
+```
+dataset/
+├── meta/
+│   ├── info.json          # 数据集元信息
+│   └── episodes.jsonl
+└── data/
+    └── chunk-000/
+        ├── episode_000000.parquet
+        ├── episode_000001.parquet
+        └── ...
+```
+
+每个 parquet 文件包含以下列：
+
+| 列名 | 说明 |
+|------|------|
+| `observation.state` | 20 维状态向量（双臂 EEF 位姿 + 夹爪宽度） |
+| `observation.images.camera0/1` | 双臂腕部相机（224×224 RGB） |
+| `observation.images.tactile_left/right_0/1` | 四路触觉传感器图像 |
+| `actions` | 20 维动作向量 |
+
+## Viewer 界面
+
+```
+┌────────────────────────────┬────────────────────────────────┐
+│                            │  R0-Visual │ R0-L-Tact │ R0-R  │
+│       3D World             ├────────────┴───────────┴───────┤
+│  (EEF + 轨迹 + 夹爪 mesh) │  R1-Visual │ R1-L-Tact │ R1-R  │
+│                            ├────────────────────────────────┤
+├──────────────┬─────────────┤       Gripper Widths           │
+│  Robot 0 XYZ│  Robot 1 XYZ│       (timeseries)             │
+└──────────────┴─────────────┴────────────────────────────────┘
+```
+
+拖动底部时间轴即可在帧之间自由跳转，3D 视图支持鼠标旋转 / 缩放 / 平移。
