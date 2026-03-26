@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 """
-Rerun-based robot teleoperation data visualization.
+Rerun-based robot teleoperation data visualization (LeRobot v2.1 format).
 
 Replaces the PyRender/OpenCV pipeline with Rerun's interactive viewer.
 Features:
   - 3D world view with EEF poses, trajectories, gripper and controller meshes
   - Camera and tactile image panels
   - Timeseries plots for EEF position and gripper width
-  - Interactive timeline scrubbing, all episodes in one recording
+  - Interactive timeline scrubbing across all episodes
 
 Usage (run from any directory):
     python /path/to/src/viz_rerun.py /path/to/lerobot_dataset
-    python /path/to/src/viz_rerun.py /path/to/data.zarr.zip
     python /path/to/src/viz_rerun.py /path/to/dataset --episode 0
     python /path/to/src/viz_rerun.py /path/to/dataset --save output.rrd
 """
@@ -387,21 +386,18 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Visualize robot teleoperation data with Rerun.\n"
-                    "Accepts a LeRobot dataset directory OR a .zarr.zip file.",
+        description="Visualize LeRobot teleoperation data with Rerun.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
             "  python src/viz_rerun.py /path/to/lerobot_dataset\n"
-            "  python src/viz_rerun.py /path/to/data.zarr.zip\n"
             "  python src/viz_rerun.py /path/to/dataset --episode 3\n"
             "  python src/viz_rerun.py /path/to/dataset --save out.rrd\n"
         ),
     )
     parser.add_argument(
         "dataset",
-        help="LeRobot dataset directory (contains meta/info.json) "
-             "or path to a .zarr.zip file",
+        help="LeRobot dataset directory (must contain meta/info.json)",
     )
     parser.add_argument(
         "--episode", "-e", type=int, default=None,
@@ -420,14 +416,8 @@ def main():
         print(f"Error: path not found: {dataset_path}")
         sys.exit(1)
 
-    # auto-detect format
-    is_lerobot = os.path.isdir(dataset_path) and os.path.exists(
-        os.path.join(dataset_path, "meta", "info.json")
-    )
-    is_zarr = dataset_path.endswith(".zarr.zip") or dataset_path.endswith(".zarr")
-
-    if not is_lerobot and not is_zarr:
-        print("Error: path must be a LeRobot dataset directory or a .zarr.zip file")
+    if not os.path.exists(os.path.join(dataset_path, "meta", "info.json")):
+        print("Error: not a LeRobot dataset (missing meta/info.json)")
         sys.exit(1)
 
     # ── initialise Rerun ──────────────────────────────────────────────────────
@@ -446,63 +436,30 @@ def main():
           f"controllers: {'✓' if 'controller_left' in meshes else '✗ (STL not found)'}")
 
     # ── episode data ──────────────────────────────────────────────────────────
+    import json
+    with open(os.path.join(dataset_path, "meta", "info.json")) as f:
+        meta = json.load(f)
+    n_episodes = meta["total_episodes"]
+    print(f"LeRobot dataset: {meta['total_frames']:,} frames | {n_episodes} episodes")
+
+    ep_indices = list(range(n_episodes)) if args.episode is None else [args.episode]
+
     global_frame = 0
-
-    if is_lerobot:
-        import json
-        with open(os.path.join(dataset_path, "meta", "info.json")) as f:
-            meta = json.load(f)
-        n_episodes = meta["total_episodes"]
-        print(f"LeRobot dataset: {meta['total_frames']:,} frames | {n_episodes} episodes")
-
-        ep_indices = list(range(n_episodes)) if args.episode is None else [args.episode]
-
-        for ep_idx in ep_indices:
-            rr.set_time("episode", sequence=ep_idx)
-            print(f"  ep {ep_idx:3d}:", end="", flush=True)
-            try:
-                data = load_lerobot_episode(dataset_path, ep_idx)
-            except FileNotFoundError as e:
-                print(f"  skip (not found: {e})")
-                continue
-            trajectories = {r: [] for r in ROBOT_IDS}
-            max_frames = len(data["robot0"]["poses"])
-            print(f" {max_frames} frames", end="", flush=True)
-            for frame_idx in range(max_frames):
-                log_frame(frame_idx, data, trajectories, global_frame)
-                global_frame += 1
-            print("  ✓")
-
-    else:  # zarr
-        # lazy import — pyrender/trimesh only needed for zarr path
-        from zarr.storage import ZipStore
-        import zarr as zarr_lib
-        from replay_buffer import ReplayBuffer
-        from imagecodecs_numcodecs import register_codecs
-        from viz_vb_data import load_episode_data
-        register_codecs()
-
-        store = ZipStore(dataset_path, mode="r")
+    for ep_idx in ep_indices:
+        rr.set_time("episode", sequence=ep_idx)
+        print(f"  ep {ep_idx:3d}:", end="", flush=True)
         try:
-            rb = ReplayBuffer.create_from_group(zarr_lib.open_group(store=store, mode="r"))
-            print(f"Zarr dataset: {rb.n_steps:,} frames | {rb.n_episodes} episodes")
-
-            ep_indices = (list(range(rb.n_episodes))
-                          if args.episode is None else [args.episode])
-
-            for ep_idx in ep_indices:
-                rr.set_time("episode", sequence=ep_idx)
-                data, _ = load_episode_data(rb, ep_idx)
-                trajectories = {r: [] for r in ROBOT_IDS}
-                max_frames = len(data["robot0"]["poses"])
-
-                print(f"  ep {ep_idx:3d}: {max_frames} frames", end="", flush=True)
-                for frame_idx in range(max_frames):
-                    log_frame(frame_idx, data, trajectories, global_frame)
-                    global_frame += 1
-                print("  ✓")
-        finally:
-            store.close()
+            data = load_lerobot_episode(dataset_path, ep_idx)
+        except FileNotFoundError as e:
+            print(f"  skip (not found: {e})")
+            continue
+        trajectories = {r: [] for r in ROBOT_IDS}
+        max_frames = len(data["robot0"]["poses"])
+        print(f" {max_frames} frames", end="", flush=True)
+        for frame_idx in range(max_frames):
+            log_frame(frame_idx, data, trajectories, global_frame)
+            global_frame += 1
+        print("  ✓")
 
     print(f"\nDone — {global_frame} frames logged.")
     if args.save:
