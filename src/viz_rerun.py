@@ -381,6 +381,38 @@ def make_blueprint():
     )
 
 
+# ── episode selection helper ──────────────────────────────────────────────────
+def _parse_episodes(spec, n_total):
+    """
+    Parse --episode argument into a sorted list of episode indices.
+
+    spec=None              → all episodes
+    spec=["3"]             → [3]
+    spec=["0","3","7"]     → [0, 3, 7]
+    spec=["0-10"]          → [0,1,...,10]
+    spec=["0-5","8","12-15"] → [0,1,2,3,4,5,8,12,13,14,15]
+    """
+    if spec is None:
+        return list(range(n_total))
+
+    indices = set()
+    for token in spec:
+        if "-" in token:
+            parts = token.split("-")
+            if len(parts) != 2:
+                raise ValueError(f"Invalid range: '{token}' (use start-end)")
+            start, end = int(parts[0]), int(parts[1])
+            indices.update(range(start, end + 1))
+        else:
+            indices.add(int(token))
+
+    result = sorted(i for i in indices if 0 <= i < n_total)
+    out_of_range = sorted(i for i in indices if not (0 <= i < n_total))
+    if out_of_range:
+        print(f"Warning: episode indices out of range (0–{n_total-1}), skipping: {out_of_range}")
+    return result
+
+
 # ── main ──────────────────────────────────────────────────────────────────────
 def main():
     import argparse
@@ -390,8 +422,11 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
-            "  python src/viz_rerun.py /path/to/lerobot_dataset\n"
-            "  python src/viz_rerun.py /path/to/dataset --episode 3\n"
+            "  python src/viz_rerun.py /path/to/dataset\n"
+            "  python src/viz_rerun.py /path/to/dataset -e 3\n"
+            "  python src/viz_rerun.py /path/to/dataset -e 0 3 7\n"
+            "  python src/viz_rerun.py /path/to/dataset -e 0-10\n"
+            "  python src/viz_rerun.py /path/to/dataset -e 0-5 8 12-15\n"
             "  python src/viz_rerun.py /path/to/dataset --save out.rrd\n"
         ),
     )
@@ -400,8 +435,16 @@ def main():
         help="LeRobot dataset directory (must contain meta/info.json)",
     )
     parser.add_argument(
-        "--episode", "-e", type=int, default=None,
-        help="Single episode index to visualize (default: all episodes)",
+        "--episode", "-e", nargs="+", default=None,
+        metavar="EP",
+        help=(
+            "Episodes to visualize. Accepts:\n"
+            "  single:  -e 3\n"
+            "  multiple: -e 0 3 7\n"
+            "  range:   -e 0-10\n"
+            "  mixed:   -e 0-5 8 12-15\n"
+            "(default: all episodes)"
+        ),
     )
     parser.add_argument(
         "--save", "-s", type=str, default=None,
@@ -442,7 +485,7 @@ def main():
     n_episodes = meta["total_episodes"]
     print(f"LeRobot dataset: {meta['total_frames']:,} frames | {n_episodes} episodes")
 
-    ep_indices = list(range(n_episodes)) if args.episode is None else [args.episode]
+    ep_indices = _parse_episodes(args.episode, n_episodes)
 
     global_frame = 0
     for ep_idx in ep_indices:

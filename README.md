@@ -30,12 +30,24 @@ python src/viz_rerun.py /path/to/lerobot_dataset
 
 | 选项 | 说明 |
 |------|------|
-| `--episode 3` / `-e 3` | 只加载第 3 个 episode（默认加载全部） |
+| `-e 3` | 只加载第 3 个 episode |
+| `-e 0 3 7` | 加载第 0、3、7 个 episode |
+| `-e 0-10` | 加载第 0 到 10 个 episode（含两端） |
+| `-e 0-5 8 12-15` | 混合写法 |
 | `--save out.rrd` / `-s out.rrd` | 保存为 `.rrd` 文件，不打开 viewer |
 
 ```bash
-# 只看第 0 个 episode
-python src/viz_rerun.py /path/to/dataset --episode 0
+# 单个 episode
+python src/viz_rerun.py /path/to/dataset -e 0
+
+# 多个不连续 episode
+python src/viz_rerun.py /path/to/dataset -e 0 3 7
+
+# 范围
+python src/viz_rerun.py /path/to/dataset -e 0-10
+
+# 混合
+python src/viz_rerun.py /path/to/dataset -e 0-5 8 12-15
 
 # 保存录制文件，之后用 rerun 打开
 python src/viz_rerun.py /path/to/dataset --save output.rrd
